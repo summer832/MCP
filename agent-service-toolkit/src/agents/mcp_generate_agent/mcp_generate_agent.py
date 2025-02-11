@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
@@ -6,6 +6,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 
 from core import get_model, settings
+from .database import database_chain
+from .browser import browser_chain
 
 # 定义状态类型
 class AgentState(MessagesState, total=False):
@@ -38,29 +40,21 @@ async def analyze_requirement(state: AgentState, config: RunnableConfig) -> Agen
 # 步骤2：代码实现
 async def implement_code(state: AgentState, config: RunnableConfig) -> AgentState:
     messages = state["messages"]
-    requirement = messages[-1].content
     requirement_type = state["requirement_type"]
     
-    # 根据需求类型选择不同的实现模板
-    template = DATABASE_TEMPLATE if requirement_type == "database" else BROWSER_TEMPLATE
-    
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    response = await m.ainvoke([
-        HumanMessage(content=f"""
-        请根据以下需求实现具体的功能代码：
-        {requirement}
-        
-        实现模板：
-        {template}
-        
-        请只返回实现代码，不需要解释。
-        """)
-    ])
+    # 根据需求类型调用不同的实现函数
+    if requirement_type == "database":
+        implementation_state = await database_chain.ainvoke({
+            "messages": messages
+        }, config)
+    else:
+        implementation_state = await browser_chain.ainvoke({
+            "messages": messages
+        }, config)
     
     return {
-        "messages": messages,
-        "requirement_type": requirement_type,
-        "code_implementation": response.content
+        **state,
+        "code_implementation": implementation_state["combined_code"]
     }
 
 # 步骤3：生成MCP框架代码
