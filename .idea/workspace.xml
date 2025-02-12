@@ -4,11 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="262382b2-87f7-4d4c-9b64-6f82ab7026cd" name="Changes" comment="Changes">
-      <change beforePath="$PROJECT_DIR$/.idea/google-maps.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/google-maps.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="262382b2-87f7-4d4c-9b64-6f82ab7026cd" name="Changes" comment="完善了MCP Server生成Agent框架">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/mcp-generate-agent.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/browser.py" beforeDir="false" afterPath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/browser.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/database.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,27 +38,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.code_20250209.executor": "Debug",
-    "Python.queryDB.executor": "Run",
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "WebServerToolWindowFactoryState": "false",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "D:/program/python/MCP/agent-service-toolkit/.venv/Scripts",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_interpreter_path": "node",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
-    "ts.external.directory.path": "D:\\PyCharm 2022.3.1\\plugins\\javascript-impl\\jsLanguageServicesImpl\\external",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.code_20250209.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.queryDB.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/program/python/MCP/agent-service-toolkit/.venv/Scripts&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_interpreter_path&quot;: &quot;node&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;D:\\PyCharm 2022.3.1\\plugins\\javascript-impl\\jsLanguageServicesImpl\\external&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
-  <component name="RunManager" selected="Python.streamlit.exe">
+}</component>
+  <component name="RunManager" selected="Python.run_service">
     <configuration name="queryDB" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="google-maps" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -160,7 +159,8 @@
       <option name="presentableId" value="Default" />
       <updated>1739166731401</updated>
       <workItem from="1739166732381" duration="7059000" />
-      <workItem from="1739238784646" duration="3220000" />
+      <workItem from="1739238784646" duration="4513000" />
+      <workItem from="1739325330609" duration="2451000" />
     </task>
     <task id="LOCAL-00001" summary="Changes">
       <created>1739185523072</created>
@@ -176,7 +176,14 @@
       <option name="project" value="LOCAL" />
       <updated>1739260580013</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="完善了MCP Server生成Agent框架">
+      <created>1739262959348</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1739262959348</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -196,12 +203,13 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Changes" />
     <MESSAGE value="添加了MCP Server生成服务的Agent框架" />
-    <option name="LAST_COMMIT_MESSAGE" value="添加了MCP Server生成服务的Agent框架" />
+    <MESSAGE value="完善了MCP Server生成Agent框架" />
+    <option name="LAST_COMMIT_MESSAGE" value="完善了MCP Server生成Agent框架" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/google_maps$code_20250209.coverage" NAME="code_20250209 Coverage Results" MODIFIED="1739170490041" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$USER_HOME$/Documents/WeChat Files/wxid_vaw5f5kkahrs22/FileStorage/File/2025-02" />
     <SUITE FILE_PATH="coverage/google_maps$queryDB.coverage" NAME="queryDB Coverage Results" MODIFIED="1739174593615" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/MCP$run_service.coverage" NAME="run_service 覆盖结果" MODIFIED="1739239217452" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/agent-service-toolkit/src" />
+    <SUITE FILE_PATH="coverage/MCP$run_service.coverage" NAME="run_service 覆盖结果" MODIFIED="1739327555015" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/agent-service-toolkit/src" />
     <SUITE FILE_PATH="coverage/MCP$streamlit_exe.coverage" NAME="streamlit.exe 覆盖结果" MODIFIED="1739240602376" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/agent-service-toolkit" />
     <SUITE FILE_PATH="coverage/MCP$queryDB.coverage" NAME="queryDB 覆盖结果" MODIFIED="1739187879755" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
