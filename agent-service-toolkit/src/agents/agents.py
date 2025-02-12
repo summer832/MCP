@@ -6,10 +6,10 @@ from agents.bg_task_agent.bg_task_agent import bg_task_agent
 from agents.chatbot import chatbot
 from agents.command_agent import command_agent
 from agents.research_assistant import research_assistant
-from agents.mcp_generate_agent import mcp_generate_agent
+from agents.mcp_generate_agent.mcp_generate_agent import mcp_generate_agent
 from schema import AgentInfo
 
-DEFAULT_AGENT = "research-assistant"
+DEFAULT_AGENT = "mcp-generate-agent"
 
 
 @dataclass
