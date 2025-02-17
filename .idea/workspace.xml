@@ -61,13 +61,13 @@
   <component name="RunManager" selected="Python.streamlit.exe">
     <configuration name="queryDB" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="google-maps" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="E:\Anaconda3\envs\mcp_creator\python.exe" />
-      <option name="SDK_NAME" value="Python 3.10 (mcp_creator)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -84,13 +84,13 @@
     </configuration>
     <configuration name="run_service" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="google-maps" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="D:\program\python\MCP\agent-service-toolkit\.venv\Scripts\python.exe" />
-      <option name="SDK_NAME" value="Python 3.10 (MCP)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/agent-service-toolkit/src" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -107,13 +107,13 @@
     </configuration>
     <configuration name="streamlit.exe" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="google-maps" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="D:\program\python\MCP\agent-service-toolkit\.venv\Scripts\python.exe" />
-      <option name="SDK_NAME" value="Python 3.10 (MCP)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/agent-service-toolkit" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -130,13 +130,13 @@
     </configuration>
     <configuration name="test_mcp" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="google-maps" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="D:\program\python\MCP\agent-service-toolkit\.venv\Scripts\python.exe" />
-      <option name="SDK_NAME" value="Python 3.10 (MCP)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -153,13 +153,13 @@
     </configuration>
     <configuration name="visualize" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="google-maps" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="D:\program\python\MCP\agent-service-toolkit\.venv\Scripts\python.exe" />
-      <option name="SDK_NAME" value="Python 3.10 (MCP)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -175,10 +175,10 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.streamlit.exe" />
       <item itemvalue="Python.run_service" />
-      <item itemvalue="Python.visualize" />
+      <item itemvalue="Python.streamlit.exe" />
       <item itemvalue="Python.test_mcp" />
+      <item itemvalue="Python.visualize" />
       <item itemvalue="Python.queryDB" />
     </list>
     <recent_temporary>
