@@ -7,7 +7,7 @@ from langgraph.graph import END, MessagesState, StateGraph
 
 from core import get_model, settings
 from .database import database_chain
-from .browser import browser_chain
+from .browser_agent import browser_chain
 
 import json
 import logging
