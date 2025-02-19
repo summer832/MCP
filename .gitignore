@@ -1,3 +1,5 @@
 /agent-service-toolkit/.venv/
 /mcpapi/example/filesystem/node_modules/
 /mcpapi/example/filesystem/dist/
+
+.idea
