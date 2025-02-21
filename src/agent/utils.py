@@ -1,51 +1,48 @@
-from typing import List, Optional, Literal
-from langchain_core.language_models.chat_models import BaseChatModel
+"""Utility & helper functions."""
 
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.types import Command
-from langchain_core.messages import HumanMessage, trim_messages
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 获取.env
+current_dir = Path(__file__).resolve().parent
+env_path = current_dir.parent.parent / '.env'
+if not env_path.exists():
+	raise FileNotFoundError(f"Environment file not found at {env_path}")
+load_dotenv(dotenv_path=env_path)
+
+anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
 
-class State(MessagesState):
-    next: str
+def get_message_text(msg: BaseMessage) -> str:
+	"""Get the text content of a message."""
+	content = msg.content
+	if isinstance(content, str):
+		return content
+	elif isinstance(content, dict):
+		return content.get("text", "")
+	else:
+		txts = [c if isinstance(c, str) else (c.get("text") or "") for c in content]
+		return "".join(txts).strip()
 
 
-def make_supervisor_node(llm: BaseChatModel, members: list[str]) -> str:
-    options = ["FINISH"] + members
-    system_prompt = (
-        "You are a supervisor tasked with managing a conversation between the"
-        f" following workers: {members}. Given the following user request,"
-        " respond with the worker to act next. Each worker will perform a"
-        " task and respond with their results and status. When finished,"
-        " respond with FINISH."
-    )
+def load_chat_model(fully_specified_name: str) -> BaseChatModel:
+	"""Load a chat model from a fully specified name.
 
-    class Router(TypedDict):
-        """Worker to route to next. If no workers needed, route to FINISH."""
-
-        next: Literal[*options]
-
-    def supervisor_node(state: State) -> Command[Literal[*members, "__end__"]]:
-        """An LLM-based router."""
-        messages = [
-            {"role": "system", "content": system_prompt},
-        ] + state["messages"]
-        response = llm.with_structured_output(Router).invoke(messages)
-        goto = response["next"]
-        if goto == "FINISH":
-            goto = END
-
-        return Command(goto=goto, update={"next": goto})
-
-    return supervisor_node
-
-async def my_node(state: State, config: RunnableConfig) -> Dict[str, Any]:
-    """Each node does work."""
-    configuration = Configuration.from_runnable_config(config)
-    # configuration = Configuration.from_runnable_config(config)
-    # You can use runtime configuration to alter the behavior of your
-    # graph.
-    return {
-        "changeme": "output from my_node. "
-        f"Configured with {configuration.my_configurable_param}"
-    }
+    Args:
+        fully_specified_name (str): String in the format 'provider/model'.
+    """
+	provider, model = fully_specified_name.split("/", maxsplit=1)
+	if provider == "anthropic":
+		return init_chat_model(
+			model,
+			model_provider="anthropic",
+			base_url="https://api.openai-proxy.org/anthropic",
+			api_key=anthropic_api_key
+		)
+	return init_chat_model(model, model_provider=provider)

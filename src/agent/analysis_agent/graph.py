@@ -24,6 +24,7 @@ from pathlib import Path
 async def call_model(
     state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
+    print("call_analysis_agent...")
     """Call the LLM powering our "agent".
 
     This function prepares the prompt, initializes the model, and processes the response.
@@ -41,9 +42,7 @@ async def call_model(
     model = load_chat_model(configuration.model).bind_tools(TOOLS)
 
     # Format the system prompt. Customize this to change the agent's behavior.
-    system_message = configuration.system_prompt.format(
-        system_time=datetime.now(tz=timezone.utc).isoformat()
-    )
+    system_message = configuration.system_prompt
 
     # Get the model's response
     response = cast(
@@ -99,19 +98,6 @@ def route_model_output(state: State) -> Literal["__end__", "tools"]:
         )
     # If there is no tool call, then we finish
     if not last_message.tool_calls:
-        # 保存analysis结果到本地
-        if isinstance(last_message, str) and is_valid_json(last_message):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_path = Path("result").mkdir(exist_ok=True) / f"analysis_{timestamp}.json"
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(json.loads(last_message), f, ensure_ascii=False, indent=2)
-
-        # 没有生成json, 结果是错的
-        else:
-            raise ValueError(
-                f"No json generate, but got {last_message}"
-            )
-        
         return "__end__"
         # Otherwise we execute the requested actions
     return "tools"
@@ -135,4 +121,4 @@ graph = builder.compile(
     interrupt_before=[],  # Add node names here to update state before they're called
     interrupt_after=[],  # Add node names here to update state after they're called
 )
-graph.name = "ReAct Agent"  # This customizes the name in LangSmith
+graph.name = "Analyse Agent"  # This customizes the name in LangSmith

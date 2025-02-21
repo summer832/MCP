@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, List
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -13,15 +13,15 @@ from typing_extensions import Annotated
 
 @dataclass
 class InputState:
-    """Defines the input state for the agent, representing a narrower interface to the outside world.
+	"""Defines the input state for the agent, representing a narrower interface to the outside world.
 
     This class is used to define the initial state and structure of incoming data.
     """
 
-    messages: Annotated[Sequence[AnyMessage], add_messages] = field(
-        default_factory=list
-    )
-    """
+	messages: Annotated[Sequence[AnyMessage], add_messages] = field(
+		default_factory=list
+	)
+	"""
     Messages tracking the primary execution state of the agent.
 
     Typically accumulates a pattern of:
@@ -40,21 +40,21 @@ class InputState:
 
 @dataclass
 class State(InputState):
-    """Represents the complete state of the agent, extending InputState with additional attributes.
+	"""Represents the complete state of the agent, extending InputState with additional attributes.
 
     This class can be used to store any information needed throughout the agent's lifecycle.
     """
 
-    is_last_step: IsLastStep = field(default=False)
-    """
+	is_last_step: IsLastStep = field(default=False)
+	"""
     Indicates whether the current step is the last one before the graph raises an error.
 
     This is a 'managed' variable, controlled by the state machine rather than user code.
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
 
-    # Additional attributes can be added here as needed.
-    # Common examples include:
-    # retrieved_documents: List[Document] = field(default_factory=list)
-    # extracted_entities: Dict[str, Any] = field(default_factory=dict)
-    # api_connections: Dict[str, Any] = field(default_factory=dict)
+	# Additional attributes can be added here as needed.
+	# Common examples include:
+	# retrieved_documents: List[Document] = field(default_factory=list)
+	# extracted_entities: Dict[str, Any] = field(default_factory=dict)
+	# api_connections: Dict[str, Any] = field(default_factory=dict)

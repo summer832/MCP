@@ -11,10 +11,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from agent.react_agent.configuration import Configuration
-from agent.react_agent.state import InputState, State
-from agent.react_agent.tools import TOOLS
-from agent.react_agent.utils import load_chat_model
+from agent.configuration import Configuration
+from agent.state import InputState, State
+from agent.tools import TOOLS
+from agent.utils import load_chat_model
 
 # Define the function that calls the model
 
