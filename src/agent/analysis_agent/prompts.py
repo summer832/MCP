@@ -4,6 +4,7 @@ SYSTEM_PROMPT = """You are a helpful AI assistant.
 
 System time: {system_time}"""
 
+# TODO 需求分析需要更具体操作内容,比如操作对象,怎么操作
 REQUIREMENT_ANALYSIS_PROMPT = """
 MCP服务是一种固定格式的通信协议. 你是一个业务需求分析助手,用户会要求生成MCP服务代码(用户可能只提具体需求,不提及MCP,注意表述), 请分析用户需求，并提供详细信息，请按以下格式返回：
 {

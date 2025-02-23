@@ -179,7 +179,12 @@ builder.add_edge("analyse", "call_supervisor")
 async def call_codegen(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
+	"""代码生成Team, 实现在 ./generate_agent"""
 	return {"messages": [AIMessage("call_codegen")]}
+
+
+builder.add_node("generate", call_codegen)
+builder.add_edge("generate", "call_supervisor")
 
 
 async def call_compose(
