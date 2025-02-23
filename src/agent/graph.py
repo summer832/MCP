@@ -18,6 +18,7 @@ from agent.analysis_agent import graph as AnalysisGraph
 from agent.analysis_agent.state import InputState as AnalysisInputState
 from agent.analysis_agent.configuration import Configuration as AnalysisConfiguration
 
+
 # Define the function that calls the model
 
 
@@ -55,7 +56,7 @@ async def call_supervisor(
 		members=state.members,
 		next_step=state.next_step
 	)
-	# TODO 第二次调用supervisor没回复
+
 	print("supervisor last message", state.messages[-1])
 	# Get the model's response, 仅跟进当前进度, 不需要历史记录
 	try:
@@ -70,7 +71,11 @@ async def call_supervisor(
 		print(f"Error message: {str(e)}")
 		exit(0)
 
-	state.go_next_step = response.content == "true"
+	# supervisor可能不回复,返回空串
+	if not response.content:
+		state.go_next_step = True
+	else:
+		state.go_next_step = response.content == "true"
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
 		return {
@@ -163,8 +168,7 @@ async def call_analyse(
 		"messages": [last_analysis_message],
 		"requirement": last_human_message,
 		"analyse_history": [analysis_messages],
-		"next_step": "codegen_agent",
-		"go_next_step": False
+		"next_step": "codegen_agent"
 	}
 
 
