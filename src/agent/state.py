@@ -55,12 +55,14 @@ class State(InputState):
 	members: Dict[str, str] = field(default_factory=dict)
 	next_step: str = field(default_factory=str)
 	go_next_step: bool = field(default_factory=bool)
-	# HumanMessage list, 保存用户的需求记录
-	requirement: List[AnyMessage] = field(default_factory=list)
-	# Message list, 保存analyse agent的记忆
+
+	requirement: str = field(default_factory=str)
+	code: str = field(default_factory=str)
+
 	analyse_history: List[AnyMessage] = field(default_factory=list)
 	generate_history: str = field(default_factory=str)
 	compose_history: str = field(default_factory=str)
+
 # Additional attributes can be added here as needed.
 # Common examples include:
 # retrieved_documents: List[Document] = field(default_factory=list)

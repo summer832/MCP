@@ -18,6 +18,12 @@ from agent.analysis_agent import graph as AnalysisGraph
 from agent.analysis_agent.state import InputState as AnalysisInputState
 from agent.analysis_agent.configuration import Configuration as AnalysisConfiguration
 
+from agent.generate_agent.static import DATABASE_EXAMPLE
+
+from agent.compose_agent import graph as ComposeGraph
+from agent.compose_agent.state import InputState as ComposeInputState
+from agent.compose_agent.configuration import Configuration as ComposeConfiguration
+
 
 # Define the function that calls the model
 
@@ -87,9 +93,8 @@ async def call_supervisor(
 			]
 		}
 
-	# supervisor的判断不显示给user
 	return {
-		"messages": [AIMessage(content=f"goto {state.next_step}: {response.content}")],
+		"messages": [*state.messages, AIMessage(content=f"goto {state.next_step}: {state.go_next_step}")],
 		"members": state.members,
 		"go_next_step": state.go_next_step,
 		"next_step": state.next_step
@@ -136,6 +141,7 @@ builder.add_conditional_edges(
 )
 
 
+# TODO 将analyse_history,last_human_message打包到input_message
 async def call_analyse(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
@@ -164,11 +170,13 @@ async def call_analyse(
 	last_analysis_message = analysis_messages[-1]
 	last_analysis_message.content = re.search(r'\{.*\}', last_analysis_message.content[0]["text"], re.DOTALL).group()
 
+	# TODO 当前不支持多轮访问analysis agent(覆盖历史记录)
 	return {
-		"messages": [last_analysis_message],
+		"messages": [*state.messages, last_analysis_message],
 		"requirement": last_human_message,
 		"analyse_history": [analysis_messages],
-		"next_step": "codegen_agent"
+		"next_step": "codegen_agent",
+
 	}
 
 
@@ -176,11 +184,16 @@ builder.add_node("analyse", call_analyse)
 builder.add_edge("analyse", "call_supervisor")
 
 
+# TODO 未完成
 async def call_codegen(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
 	"""代码生成Team, 实现在 ./generate_agent"""
-	return {"messages": [AIMessage("call_codegen")]}
+
+	return {
+		"messages": [*state.messages, AIMessage(content=DATABASE_EXAMPLE)],
+		"next_step": "compose_agent"
+	}
 
 
 builder.add_node("generate", call_codegen)
@@ -190,13 +203,39 @@ builder.add_edge("generate", "call_supervisor")
 async def call_compose(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
-	return {"messages": [AIMessage("call_compose")]}
+	print("call_compose...")
+	code_message = state.messages[-2]
+	print(code_message)
+	if not isinstance(code_message, AIMessage):
+		raise ValueError(
+			f"Expected AIMessage in output edges, but got {type(code_message).__name__}"
+		)
+	input_message = ComposeInputState(messages=code_message)
+	compose_cfg_obj = ComposeConfiguration()
+	compose_runconfig = RunnableConfig(
+		configurable={
+			"system_prompt": compose_cfg_obj.system_prompt,
+			"model": compose_cfg_obj.model,
+			"max_search_results": compose_cfg_obj.max_search_results,
+		}
+	)
+	response = await ComposeGraph.ainvoke(input=input_message, config=compose_runconfig)
 
+	compose_messages = response["messages"]
+	print("analyse result:", compose_messages)
+	final_code = compose_messages[-1]
 
-builder.add_node("generate", call_codegen)
-builder.add_edge("analyse", "call_supervisor")
+	# TODO 当前不支持多轮访问compose agent(覆盖历史记录)
+	return {
+		"messages": [*state.messages, compose_messages],
+		"code": final_code,
+		"compose_history": [compose_messages],
+		"next_step": "__end__",
+	}
 builder.add_node("compose", call_compose)
 builder.add_edge("analyse", "call_supervisor")
+
+# TODO 目前未实现代码测试与修正工具
 
 # Compile the builder into an executable graph
 # You can customize this by adding interrupt points for state updates
