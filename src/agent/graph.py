@@ -2,7 +2,7 @@
 
 Works with a chat model with tool calling support.
 """
-
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, cast
 
@@ -15,8 +15,8 @@ from agent.state import InputState, State
 from agent.utils import load_chat_model
 
 from agent.analysis_agent import graph as AnalysisGraph
-from agent.analysis_agent.state import InputState as AnalysisInpusState
-
+from agent.analysis_agent.state import InputState as AnalysisInputState
+from agent.analysis_agent.configuration import Configuration as AnalysisConfiguration
 
 # Define the function that calls the model
 
@@ -42,25 +42,35 @@ async def call_supervisor(
 	model = load_chat_model(configuration.model)
 
 	# 初始化
-	response = []
 	if not state.members:
-		state.members = ["analyse_agent", "codegen_agent", "compose_agent"]
+		state.members = {
+			"analyse_agent": "负责需求分析,输入笼统的需求str,输出为可以用代码实现的具体需求分析json",
+			"codegen_agent": "负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list",
+			"compose_agent": "负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
+		}
 		state.next_step = "analyse_agent"
 
-		# Format the system prompt. Customize this to change the agent's behavior.
-		system_message = configuration.system_prompt.format(
-			members=state.members,
-			next_step=state.next_step
-		)
-
-		# Get the model's response
+	# Format the system prompt. Customize this to change the agent's behavior.
+	system_message = configuration.system_prompt.format(
+		members=state.members,
+		next_step=state.next_step
+	)
+	# TODO 第二次调用supervisor没回复
+	print("supervisor last message", state.messages[-1])
+	# Get the model's response, 仅跟进当前进度, 不需要历史记录
+	try:
 		response = cast(
 			AIMessage,
 			await model.ainvoke(
-				[{"role": "system", "content": system_message}, *state.messages], config
+				[{"role": "system", "content": system_message}, state.messages[-1]], config
 			),
 		)
+	except Exception as e:
+		print(f"Error type: {type(e).__name__}")
+		print(f"Error message: {str(e)}")
+		exit(0)
 
+	state.go_next_step = response.content == "true"
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
 		return {
@@ -74,9 +84,9 @@ async def call_supervisor(
 
 	# supervisor的判断不显示给user
 	return {
-		"messages": [AIMessage(content=f"{state.next_step} goto next_step: {state.next_step}")],
+		"messages": [AIMessage(content=f"goto {state.next_step}: {response.content}")],
 		"members": state.members,
-		"go_next_step": response.content == "true",
+		"go_next_step": state.go_next_step,
 		"next_step": state.next_step
 	}
 
@@ -96,6 +106,10 @@ builder.add_edge("__start__", "call_supervisor")
 def route_model_output(state: State) -> Literal[
 	"__end__", "generate", "analyse", "compose"]:
 	"""根据supervisor的判断决定是否进入相应流程"""
+	if state.go_next_step == "false":
+		print("processing error.")
+		return "__end__"
+
 	if state.next_step == "analyse_agent" and state.go_next_step:
 		return "analyse"
 	elif state.next_step == "codegen_agent" and state.go_next_step:
@@ -128,14 +142,27 @@ async def call_analyse(
 		raise ValueError(
 			f"Expected AIMessage in output edges, but got {type(last_human_message).__name__}"
 		)
-	input_message = AnalysisInpusState(messages=last_human_message)
+	input_message = AnalysisInputState(messages=last_human_message)
+	analysis_cfg_obj = AnalysisConfiguration()
+	analysis_runconfig = RunnableConfig(
+		configurable={
+			"system_prompt": analysis_cfg_obj.system_prompt,
+			"model": analysis_cfg_obj.model,
+			"max_search_results": analysis_cfg_obj.max_search_results,
+		}
+	)
+	response = await AnalysisGraph.ainvoke(input=input_message, config=analysis_runconfig)
 
-	response = await AnalysisGraph.ainvoke(input=input_message)
-	print("call_analyse done:", response)
+	analysis_messages = response["messages"]
+	print("analyse result:", analysis_messages)
+	# 数据清洗
+	last_analysis_message = analysis_messages[-1]
+	last_analysis_message.content = re.search(r'\{.*\}', last_analysis_message.content[0]["text"], re.DOTALL).group()
+
 	return {
-		"messages": [response["messages"][-1]],
+		"messages": [last_analysis_message],
 		"requirement": last_human_message,
-		"analyse_history": [response["messages"]],
+		"analyse_history": [analysis_messages],
 		"next_step": "codegen_agent",
 		"go_next_step": False
 	}

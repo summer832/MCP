@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence, List
+from typing import Sequence, List, Dict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -52,8 +52,7 @@ class State(InputState):
     This is a 'managed' variable, controlled by the state machine rather than user code.
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
-	# TODO members需要是一个带有description的dict, 从而让supervisor prompt判断next_step
-	members: List[str] = field(default_factory=list)
+	members: Dict[str, str] = field(default_factory=dict)
 	next_step: str = field(default_factory=str)
 	go_next_step: bool = field(default_factory=bool)
 	# HumanMessage list, 保存用户的需求记录
@@ -62,8 +61,8 @@ class State(InputState):
 	analyse_history: List[AnyMessage] = field(default_factory=list)
 	generate_history: str = field(default_factory=str)
 	compose_history: str = field(default_factory=str)
-	# Additional attributes can be added here as needed.
-	# Common examples include:
-	# retrieved_documents: List[Document] = field(default_factory=list)
-	# extracted_entities: Dict[str, Any] = field(default_factory=dict)
-	# api_connections: Dict[str, Any] = field(default_factory=dict)
+# Additional attributes can be added here as needed.
+# Common examples include:
+# retrieved_documents: List[Document] = field(default_factory=list)
+# extracted_entities: Dict[str, Any] = field(default_factory=dict)
+# api_connections: Dict[str, Any] = field(default_factory=dict)
