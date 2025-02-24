@@ -11,19 +11,16 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from agent.compose_agent.configuration import Configuration
-from agent.compose_agent.state import InputState, State
-from agent.compose_agent.tools import TOOLS
-from agent.compose_agent.utils import load_chat_model, is_valid_json
-from agent.compose_agent.promtps import PACKAGE_PROMPT,CONFIG_PROMPT,README_PROMPT
+from agent.generate_agent.configuration import Configuration
+from agent.generate_agent.state import InputState, State
+from agent.generate_agent.tools import TOOLS
+from agent.generate_agent.prompts import COMPOSE_PROMPT,REVISE_PROMPT,DATABASE_EXAMPLE
 from pathlib import Path
 
 
 # Define the function that calls the model
 
 # TODO 代码检查-代码修正循环调用
-# TODO 完成package.json, tsconfig.json, README.MD
-# TODO Inspector检测
 async def call_model(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
@@ -38,35 +35,10 @@ async def call_model(
     Returns:
         dict: A dictionary containing the model's response message.
     """
-	configuration = Configuration.from_runnable_config(config)
-
-	# Initialize the model with tool binding. Change the model or add more tools here.
-	model = load_chat_model(configuration.model).bind_tools(TOOLS)
-
-	# Format the system prompt. Customize this to change the agent's behavior.
-	system_message = configuration.system_prompt
-	print("call_analysis_agent: ", system_message)
-	# Get the model's response
-	response = cast(
-		AIMessage,
-		await model.ainvoke(
-			[{"role": "system", "content": system_message}, *state.messages], config
-		),
-	)
-
-	# Handle the case when it's the last step and the model still wants to use a tool
-	if state.is_last_step and response.tool_calls:
-		return {
-			"messages": [
-				AIMessage(
-					id=response.id,
-					content="Sorry, I could not find an answer to your question in the specified number of steps.",
-				)
-			]
-		}
-
-	# Return the model's response as a list to be added to existing messages
-	return {"messages": [response]}
+	# TODO 这里应该访问代码生成模块,目前用example填补
+	return {
+		"messages": [*state.messages, AIMessage(content=DATABASE_EXAMPLE)],
+	}
 
 
 # Define a new graph
@@ -123,4 +95,4 @@ graph = builder.compile(
 	interrupt_before=[],  # Add node names here to update state before they're called
 	interrupt_after=[],  # Add node names here to update state after they're called
 )
-graph.name = "Compose Agent"  # This customizes the name in LangSmith
+graph.name = "Codegen Agent"  # This customizes the name in LangSmith

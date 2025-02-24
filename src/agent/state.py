@@ -10,6 +10,8 @@ from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
 from typing_extensions import Annotated
 
+from agent.configuration import Configuration
+
 
 @dataclass
 class InputState:
@@ -53,18 +55,36 @@ class State(InputState):
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
 	members: Dict[str, str] = field(default_factory=dict)
-	next_step: str = field(default_factory=str)
-	go_next_step: bool = field(default_factory=bool)
+	current_step: str = field(default_factory=str)
 
 	requirement: str = field(default_factory=str)
+	analyse_result: str = field(default_factory=str)
 	code: str = field(default_factory=str)
 
 	analyse_history: List[AnyMessage] = field(default_factory=list)
 	generate_history: str = field(default_factory=str)
 	compose_history: str = field(default_factory=str)
 
+
 # Additional attributes can be added here as needed.
 # Common examples include:
 # retrieved_documents: List[Document] = field(default_factory=list)
 # extracted_entities: Dict[str, Any] = field(default_factory=dict)
 # api_connections: Dict[str, Any] = field(default_factory=dict)
+
+# 根据config更新current_step
+def update_next_step(state: State, config: Configuration) -> str:
+	# 查找当前步骤的索引
+	current_index = next(
+		(i for i, step in enumerate(config.workflow)
+		 if step['name'] == state.current_step),
+		-1
+	)
+
+	# 如果找到当前步骤且不是最后一个，设置下一步
+	if current_index != -1 and current_index < len(config.workflow) - 1:
+		state.current_step = config.workflow[current_index + 1]['name']
+	else:
+		state.current_step = "__end__"  # 工作流结束
+
+	return state.current_step

@@ -11,14 +11,16 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 
 from agent.configuration import Configuration
-from agent.state import InputState, State
+from agent.state import InputState, State, update_next_step
 from agent.utils import load_chat_model
 
 from agent.analysis_agent import graph as AnalysisGraph
 from agent.analysis_agent.state import InputState as AnalysisInputState
 from agent.analysis_agent.configuration import Configuration as AnalysisConfiguration
 
-from agent.generate_agent.static import DATABASE_EXAMPLE
+from agent.generate_agent import graph as CodegenGraph
+from agent.generate_agent.state import InputState as CodegenInputState
+from agent.generate_agent.configuration import Configuration as CodegenConfiguration
 
 from agent.compose_agent import graph as ComposeGraph
 from agent.compose_agent.state import InputState as ComposeInputState
@@ -28,7 +30,7 @@ from agent.compose_agent.configuration import Configuration as ComposeConfigurat
 # Define the function that calls the model
 
 
-# 初始化supervisor的prompt,发送问候并
+# 初始化supervisor
 async def call_supervisor(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
@@ -47,29 +49,21 @@ async def call_supervisor(
 
 	# Initialize the model with tool binding. Change the model or add more tools here.
 	model = load_chat_model(configuration.model)
-
-	# 初始化
-	if not state.members:
-		state.members = {
-			"analyse_agent": "负责需求分析,输入笼统的需求str,输出为可以用代码实现的具体需求分析json",
-			"codegen_agent": "负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list",
-			"compose_agent": "负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
-		}
-		state.next_step = "analyse_agent"
+	if not state.current_step:
+		state.current_step = configuration.workflow[0]['name']
 
 	# Format the system prompt. Customize this to change the agent's behavior.
 	system_message = configuration.system_prompt.format(
-		members=state.members,
-		next_step=state.next_step
+		members=configuration.workflow,
+		next_step=update_next_step(state, configuration)
 	)
 
-	print("supervisor last message", state.messages[-1])
-	# Get the model's response, 仅跟进当前进度, 不需要历史记录
+	# Get the model's response
 	try:
 		response = cast(
 			AIMessage,
 			await model.ainvoke(
-				[{"role": "system", "content": system_message}, state.messages[-1]], config
+				[{"role": "system", "content": system_message}, *state.messages], config
 			),
 		)
 	except Exception as e:
@@ -77,11 +71,15 @@ async def call_supervisor(
 		print(f"Error message: {str(e)}")
 		exit(0)
 
-	# supervisor可能不回复,返回空串
+	# 更新go_next_step
 	if not response.content:
-		state.go_next_step = True
+		go_next_step = True
 	else:
-		state.go_next_step = response.content == "true"
+		go_next_step = response.content == "true"
+
+	# 更新current_step
+	if go_next_step:
+		state.current_step = update_next_step(state, configuration)
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
 		return {
@@ -96,8 +94,7 @@ async def call_supervisor(
 	return {
 		"messages": [*state.messages, AIMessage(content=f"goto {state.next_step}: {state.go_next_step}")],
 		"members": state.members,
-		"go_next_step": state.go_next_step,
-		"next_step": state.next_step
+		"current_step": state.current_step
 	}
 
 
@@ -114,22 +111,15 @@ builder.add_edge("__start__", "call_supervisor")
 
 
 def route_model_output(state: State) -> Literal[
-	"__end__", "generate", "analyse", "compose"]:
-	"""根据supervisor的判断决定是否进入相应流程"""
-	if state.go_next_step == "false":
-		print("processing error.")
-		return "__end__"
-
-	if state.next_step == "analyse_agent" and state.go_next_step:
-		return "analyse"
-	elif state.next_step == "codegen_agent" and state.go_next_step:
-		state.next_step = "compose_agent"
-		return "generate"
-	elif state.next_step == "compose_agent" and state.go_next_step:
-		state.next_step = "__end__"
-		return "compose"
-
-	return "__end__"
+	"call_supervisor", "analyse_agent", "codegen_agent", "compose_agent", "__end__"
+]:
+	"""
+	根据supervisor的判断决定是否进入相应流程
+	修改configuration.workflow时,请修改此处
+	"""
+	if state.current_step == "__start__":
+		return "call_supervisor"
+	return state.current_step
 
 
 # Add a conditional edge to determine the next step after `call_model`
@@ -165,7 +155,6 @@ async def call_analyse(
 	response = await AnalysisGraph.ainvoke(input=input_message, config=analysis_runconfig)
 
 	analysis_messages = response["messages"]
-	print("analyse result:", analysis_messages)
 	# 数据清洗
 	last_analysis_message = analysis_messages[-1]
 	last_analysis_message.content = re.search(r'\{.*\}', last_analysis_message.content[0]["text"], re.DOTALL).group()
@@ -175,31 +164,44 @@ async def call_analyse(
 		"messages": [*state.messages, last_analysis_message],
 		"requirement": last_human_message,
 		"analyse_history": [analysis_messages],
-		"next_step": "codegen_agent",
-
+		"analyse_result": last_analysis_message,
 	}
 
 
-builder.add_node("analyse", call_analyse)
-builder.add_edge("analyse", "call_supervisor")
+builder.add_node("analyse_agent", call_analyse)
+builder.add_edge("analyse_agent", "call_supervisor")
 
 
-# TODO 未完成
+# TODO 未完成, 未实现代码检查循环
 async def call_codegen(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
 	"""代码生成Team, 实现在 ./generate_agent"""
-
+	input_message = CodegenInputState(messages=state.analyse_result)
+	codegen_cfg_obj = CodegenConfiguration()
+	codegen_runconfig = RunnableConfig(
+		configurable={
+			"system_prompt": codegen_cfg_obj.system_prompt,
+			"model": codegen_cfg_obj.model,
+			"max_search_results": codegen_cfg_obj.max_search_results,
+		}
+	)
+	response = await CodegenGraph.ainvoke(input=input_message, config=codegen_runconfig)
+	codegen_messages = response["messages"]
+	last_codegen_message = codegen_messages[-1]
+	last_codegen_message.content = last_codegen_message.content[0]["text"]
 	return {
-		"messages": [*state.messages, AIMessage(content=DATABASE_EXAMPLE)],
-		"next_step": "compose_agent"
+		"messages": [*state.messages, last_codegen_message],
+		"codegen_history": [codegen_messages],
+		"codegen_result": last_codegen_message,
 	}
 
 
-builder.add_node("generate", call_codegen)
-builder.add_edge("generate", "call_supervisor")
+builder.add_node("codegen_agent", call_codegen)
+builder.add_edge("codegen_agent", "call_supervisor")
 
 
+# TODO 未完成, 生成package.json, tsconfig.json, README.MD
 async def call_compose(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
@@ -230,12 +232,11 @@ async def call_compose(
 		"messages": [*state.messages, compose_messages],
 		"code": final_code,
 		"compose_history": [compose_messages],
-		"next_step": "__end__",
 	}
-builder.add_node("compose", call_compose)
-builder.add_edge("analyse", "call_supervisor")
 
-# TODO 目前未实现代码测试与修正工具
+
+builder.add_node("compose_agent", call_compose)
+builder.add_edge("compose_agent", "call_supervisor")
 
 # Compile the builder into an executable graph
 # You can customize this by adding interrupt points for state updates
@@ -243,4 +244,4 @@ graph = builder.compile(
 	interrupt_before=[],  # Add node names here to update state before they're called
 	interrupt_after=[],  # Add node names here to update state after they're called
 )
-graph.name = "Supervisor Agent"  # This customizes the name in LangSmith
+graph.name = "Supervisor"  # This customizes the name in LangSmith
