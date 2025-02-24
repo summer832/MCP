@@ -6,9 +6,6 @@ pip install --upgrade "langgraph-cli[inmem]"
 langgraph new path/to/your/app --template react-agent-python 
 pip install -e .
 ```
-如果添加文件,请重新加载文件结构
-```commandline
-pip install -e .
 ```
 # 启动
 ```commandline

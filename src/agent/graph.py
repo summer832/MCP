@@ -1,4 +1,4 @@
-"""Define a custom Reasoning and Action agent.
+"""Define a custom multi-step Reasoning and Action agent with ReAct-like structure.
 
 Works with a chat model with tool calling support.
 """
