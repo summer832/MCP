@@ -1,4 +1,6 @@
 """Utility & helper functions."""
+import json
+import re
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
@@ -19,6 +21,39 @@ anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 
+def get_json(string: str) -> str:
+	"""提取字符串的json"""
+	string = string.replace('\\n', '')
+	try:
+		json.loads(string)
+		return string
+	except json.JSONDecodeError:
+		return re.search(r'\{.*\}', string, re.DOTALL).group()
+
+
+def extract_content(response) -> str:
+	"""统一处理不同格式的response content，转换为字符串"""
+	content = response.content
+
+	# 如果content是字符串，直接返回
+	if isinstance(content, str):
+		return content
+
+	# 如果content是列表
+	if isinstance(content, list):
+		# 提取所有text字段并拼接
+		texts = []
+		for item in content:
+			# 如果是字典且包含text字段
+			if isinstance(item, dict) and "text" in item:
+				texts.append(item["text"])
+			# 如果是字符串
+			elif isinstance(item, str):
+				texts.append(item)
+		return " ".join(texts)
+
+	# 如果是其他类型，转换为字符串
+	return str(content)
 def get_message_text(msg: BaseMessage) -> str:
 	"""Get the text content of a message."""
 	content = msg.content

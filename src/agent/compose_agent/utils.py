@@ -1,4 +1,5 @@
 """Utility & helper functions."""
+import re
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
@@ -20,13 +21,14 @@ anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 
-def is_valid_json(string: str) -> bool:
-	"""检查字符串是否为有效的JSON格式"""
+def get_json(string: str) -> str:
+	"""提取字符串的json"""
+	string = string.replace('\\n', '')
 	try:
 		json.loads(string)
-		return True
+		return string
 	except json.JSONDecodeError:
-		return False
+		return re.search(r'\{.*\}', string, re.DOTALL).group()
 
 
 def get_message_text(msg: BaseMessage) -> str:

@@ -17,43 +17,43 @@ from agent.configuration import Configuration
 class InputState:
 	"""Defines the input state for the agent, representing a narrower interface to the outside world.
 
-    This class is used to define the initial state and structure of incoming data.
-    """
+	This class is used to define the initial state and structure of incoming data.
+	"""
 
 	messages: Annotated[Sequence[AnyMessage], add_messages] = field(
 		default_factory=list
 	)
 	"""
-    Messages tracking the primary execution state of the agent.
+	Messages tracking the primary execution state of the agent.
 
-    Typically accumulates a pattern of:
-    1. HumanMessage - user input
-    2. AIMessage with .tool_calls - agent picking tool(s) to use to collect information
-    3. ToolMessage(s) - the responses (or errors) from the executed tools
-    4. AIMessage without .tool_calls - agent responding in unstructured format to the user
-    5. HumanMessage - user responds with the next conversational turn
+	Typically accumulates a pattern of:
+	1. HumanMessage - user input
+	2. AIMessage with .tool_calls - agent picking tool(s) to use to collect information
+	3. ToolMessage(s) - the responses (or errors) from the executed tools
+	4. AIMessage without .tool_calls - agent responding in unstructured format to the user
+	5. HumanMessage - user responds with the next conversational turn
 
-    Steps 2-5 may repeat as needed.
+	Steps 2-5 may repeat as needed.
 
-    The `add_messages` annotation ensures that new messages are merged with existing ones,
-    updating by ID to maintain an "append-only" state unless a message with the same ID is provided.
-    """
+	The `add_messages` annotation ensures that new messages are merged with existing ones,
+	updating by ID to maintain an "append-only" state unless a message with the same ID is provided.
+	"""
 
 
 @dataclass
 class State(InputState):
 	"""Represents the complete state of the agent, extending InputState with additional attributes.
 
-    This class can be used to store any information needed throughout the agent's lifecycle.
-    """
+	This class can be used to store any information needed throughout the agent's lifecycle.
+	"""
 
 	is_last_step: IsLastStep = field(default=False)
 	"""
-    Indicates whether the current step is the last one before the graph raises an error.
+	Indicates whether the current step is the last one before the graph raises an error.
 
-    This is a 'managed' variable, controlled by the state machine rather than user code.
-    It is set to 'True' when the step count reaches recursion_limit - 1.
-    """
+	This is a 'managed' variable, controlled by the state machine rather than user code.
+	It is set to 'True' when the step count reaches recursion_limit - 1.
+	"""
 	members: Dict[str, str] = field(default_factory=dict)
 	current_step: str = field(default_factory=str)
 
@@ -77,14 +77,12 @@ def update_next_step(state: State, config: Configuration) -> str:
 	# 查找当前步骤的索引
 	current_index = next(
 		(i for i, step in enumerate(config.workflow)
-		 if step['name'] == state.current_step),
+		 if step.name == state.current_step),
 		-1
 	)
 
 	# 如果找到当前步骤且不是最后一个，设置下一步
 	if current_index != -1 and current_index < len(config.workflow) - 1:
-		state.current_step = config.workflow[current_index + 1]['name']
+		return config.workflow[current_index + 1].name
 	else:
-		state.current_step = "__end__"  # 工作流结束
-
-	return state.current_step
+		return "__end__"  # 工作流结束

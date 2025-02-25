@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig, ensure_config
 from agent import prompts
 
 
+@dataclass
 class WorkflowNode:
 	name: str
 	description: str
@@ -43,24 +44,24 @@ class Configuration:
 	)
 
 	# 决定了workflow步骤与顺序
-	workflow: List[Dict[str, str]] = field(
+	workflow: List[WorkflowNode] = field(
 		default_factory=lambda: [
-			{
-				"name": "__start__",
-				"description": "负责初始化,初始化MCP代码生成Team配置"
-			},
-			{
-				"name": "analyse_agent",
-				"description": "负责需求分析,输入笼统的需求str,输出为可以用代码实现的具体需求分析json"
-			},
-			{
-				"name": "codegen_agent",
-				"description": "负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list"
-			},
-			{
-				"name": "compose_agent",
-				"description": "负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
-			}
+			WorkflowNode(
+				name="__start__",
+				description="负责初始化,初始化MCP代码生成Team配置"
+			),
+			WorkflowNode(
+				name="analyse_agent",
+				description="负责需求分析,输入笼统的需求str,输出为可以用代码实现的具体需求分析json"
+			),
+			WorkflowNode(
+				name="codegen_agent",
+				description="负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list"
+			),
+			WorkflowNode(
+				name="compose_agent",
+				description="负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
+			)
 		],
 		metadata={
 			"description": "工作流配置"

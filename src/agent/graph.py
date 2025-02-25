@@ -2,6 +2,7 @@
 
 Works with a chat model with tool calling support.
 """
+import json
 import re
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, cast
@@ -10,9 +11,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 
-from agent.configuration import Configuration
+from agent.configuration import Configuration, WorkflowNode
 from agent.state import InputState, State, update_next_step
-from agent.utils import load_chat_model
+from agent.utils import load_chat_model, get_json, extract_content
 
 from agent.analysis_agent import graph as AnalysisGraph
 from agent.analysis_agent.state import InputState as AnalysisInputState
@@ -49,21 +50,44 @@ async def call_supervisor(
 
 	# Initialize the model with tool binding. Change the model or add more tools here.
 	model = load_chat_model(configuration.model)
+	if not configuration.workflow:
+		configuration.workflow = [
+			WorkflowNode(
+				name="__start__",
+				description="负责初始化,初始化MCP代码生成Team配置"
+			),
+			WorkflowNode(
+				name="analyse_agent",
+				description="负责需求分析,输入笼统的需求str,输出为可以用代码实现的具体需求分析json"
+			),
+			WorkflowNode(
+				name="codegen_agent",
+				description="负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list"
+			),
+			WorkflowNode(
+				name="compose_agent",
+				description="负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
+			)
+		]
 	if not state.current_step:
-		state.current_step = configuration.workflow[0]['name']
+		state.current_step = configuration.workflow[0].name
 
 	# Format the system prompt. Customize this to change the agent's behavior.
 	system_message = configuration.system_prompt.format(
-		members=configuration.workflow,
+		members="\n".join([f"- {node.name}: {node.description}" for node in configuration.workflow]),
 		next_step=update_next_step(state, configuration)
 	)
 
-	# Get the model's response
+	# 将prompt嵌入到最后一条消息前
+	tmp_message = []
+	tmp_message.extend(state.messages[:-1])
+	tmp_message.append({"role": "system", "content": system_message})
+	tmp_message.append(state.messages[-1])
 	try:
 		response = cast(
 			AIMessage,
 			await model.ainvoke(
-				[{"role": "system", "content": system_message}, *state.messages], config
+				tmp_message, config
 			),
 		)
 	except Exception as e:
@@ -80,6 +104,7 @@ async def call_supervisor(
 	# 更新current_step
 	if go_next_step:
 		state.current_step = update_next_step(state, configuration)
+	print("goto ", state.current_step)
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
 		return {
@@ -92,7 +117,7 @@ async def call_supervisor(
 		}
 
 	return {
-		"messages": [*state.messages, AIMessage(content=f"goto {state.next_step}: {state.go_next_step}")],
+		"messages": state.messages,
 		"members": state.members,
 		"current_step": state.current_step
 	}
@@ -137,7 +162,7 @@ async def call_analyse(
 ) -> Dict[str, List[AIMessage]]:
 	"""需求分析Team, 实现在 ./analysis_agent"""
 	print("call_analyse...")
-	last_human_message = state.messages[-2]
+	last_human_message = state.messages[-1]
 	print(last_human_message)
 	if not isinstance(last_human_message, HumanMessage):
 		raise ValueError(
@@ -155,16 +180,16 @@ async def call_analyse(
 	response = await AnalysisGraph.ainvoke(input=input_message, config=analysis_runconfig)
 
 	analysis_messages = response["messages"]
-	# 数据清洗
-	last_analysis_message = analysis_messages[-1]
-	last_analysis_message.content = re.search(r'\{.*\}', last_analysis_message.content[0]["text"], re.DOTALL).group()
+	analysis_result = json.loads(get_json(extract_content(analysis_messages[-1])))
+	analysis_result["original_requirement"] = last_human_message.content
+	print("analyse result: ", analysis_messages[-1])
 
 	# TODO 当前不支持多轮访问analysis agent(覆盖历史记录)
 	return {
-		"messages": [*state.messages, last_analysis_message],
+		"messages": [*state.messages, analysis_messages[-1]],
 		"requirement": last_human_message,
 		"analyse_history": [analysis_messages],
-		"analyse_result": last_analysis_message,
+		"analyse_result": HumanMessage(content=json.dumps(analysis_result, ensure_ascii=False)),
 	}
 
 
@@ -172,11 +197,11 @@ builder.add_node("analyse_agent", call_analyse)
 builder.add_edge("analyse_agent", "call_supervisor")
 
 
-# TODO 未完成, 未实现代码检查循环
 async def call_codegen(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
 	"""代码生成Team, 实现在 ./generate_agent"""
+	# 打包需求分析结果作为输入
 	input_message = CodegenInputState(messages=state.analyse_result)
 	codegen_cfg_obj = CodegenConfiguration()
 	codegen_runconfig = RunnableConfig(
@@ -187,13 +212,12 @@ async def call_codegen(
 		}
 	)
 	response = await CodegenGraph.ainvoke(input=input_message, config=codegen_runconfig)
-	codegen_messages = response["messages"]
-	last_codegen_message = codegen_messages[-1]
-	last_codegen_message.content = last_codegen_message.content[0]["text"]
+	code_result = response["state"].code
+	print("codegen result:", code_result)
 	return {
-		"messages": [*state.messages, last_codegen_message],
-		"codegen_history": [codegen_messages],
-		"codegen_result": last_codegen_message,
+		"messages": [*state.messages, AIMessage(content=code_result)],
+		"codegen_history": [response["messages"]],
+		"codegen_result": HumanMessage(content=code_result),
 	}
 
 

@@ -5,11 +5,15 @@ SYSTEM_PROMPT = """You are a helpful AI assistant.
 System time: {system_time}"""
 
 SUPERVISOR_PROMPT = """
-MCP服务是一种固定格式的通信协议.你是MCP代码生成服务的监督者, 你拥有一些工具, 你需要协调代码生成工作
-你拥有以下工具: {members}. 这些工作表示了MCP代码生成的业务流程.
-你当前处于{next_step}状态,请你根据当前的进度,判断下一条信息是否是{next_step}需要完成的工作?
-如果当前的进度就是需要使用{next_step}来操作,请回答"true",
-如果你认为用户不需要当前工具,或者用户对当前结果不满意,正在试图纠正上一步操作,请返回"false".
-无论User问你什么问题,你只能回答"true" or "false".
-如果你认为不需要回答,请返回"true"
+"MCP service is a communication protocol with a fixed format. You are the supervisor of the MCP code generation service. 
+You have some tools and need to coordinate the code generation work: {members}. 
+These represent the business processes of MCP code generation.
+You are currently in the {next_step} state. Based on the current progress, please determine if the next message is work 
+that needs to be completed by {next_step}?
+If the current progress requires using {next_step} to operate, please answer "true".
+If you believe the user does not need the current tool, or the user is dissatisfied with the current result and 
+is trying to correct the previous step's operation, please return "false".
+
+Regardless of what question the User asks you, you can only answer "true" or "false".
+If you think no answer is needed, please return "true".
 """

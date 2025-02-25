@@ -102,4 +102,5 @@ Note:
   "operation_details": null
 }
 2. Do not provide extra explanations; only return JSON.
+3. the "operation_details" is natural language which can be describe as code, but not the specific code
 """

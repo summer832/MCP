@@ -1,10 +1,11 @@
 """requirement analyse Team, used in MCP codegen multi-agent system
 """
 import json
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, cast
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
@@ -12,9 +13,23 @@ from langgraph.prebuilt import ToolNode
 from agent.analysis_agent.configuration import Configuration
 from agent.analysis_agent.state import InputState, State
 from agent.analysis_agent.tools import TOOLS
-from agent.analysis_agent.utils import load_chat_model, is_valid_json
+from agent.analysis_agent.utils import load_chat_model, get_json, extract_content
 from agent.analysis_agent.prompts import ANALYSIS_SYSTEM_PROMPT, REFINEMENT_SYSTEM_PROMPT, FINAL_OUTPUT_SYSTEM_PROMPT
 from pathlib import Path
+
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed, wait_combine
+
+
+# 重试机制,防止API不稳定
+@retry(
+	stop=stop_after_attempt(3),
+	wait=wait_combine(
+		wait_fixed(2),
+		wait_exponential(multiplier=1, min=4, max=10)  # 指数增长等待
+	)
+)
+async def call_model_with_retry(model, messages, config):
+	return await model.ainvoke(messages, config)
 
 
 # Define the function that calls the model
@@ -42,9 +57,10 @@ async def call_analyse(
 	# Get the model's response
 	response = cast(
 		AIMessage,
-		await model.ainvoke(
-			[{"role": "system", "content": system_message}, *state.messages], config
-		),
+		await call_model_with_retry(model,
+		                            [{"role": "system", "content": system_message}, *state.messages],
+		                            config
+		                            ),
 	)
 
 	# Handle the case when it's the last step and the model still wants to use a tool
@@ -58,11 +74,10 @@ async def call_analyse(
 			]
 		}
 	last_message = state.messages[-1]
-
+	print("init analyse:", response)
 	# Return the model's response as a list to be added to existing messages
 	return {
 		"messages": [*state.messages, response],
-		"requirement": last_message
 	}
 
 
@@ -82,17 +97,6 @@ builder.add_edge("__start__", "call_analyse")
 async def call_refine(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
-	"""Call the LLM powering our "agent".
-
-    This function prepares the prompt, initializes the model, and processes the response.
-
-    Args:
-        state (State): The current state of the conversation.
-        config (RunnableConfig): Configuration for the model run.
-
-    Returns:
-        dict: A dictionary containing the model's response message.
-    """
 	configuration = Configuration.from_runnable_config(config)
 
 	# Initialize the model with tool binding. Change the model or add more tools here.
@@ -103,11 +107,15 @@ async def call_refine(
 	# Get the model's response
 	response = cast(
 		AIMessage,
-		await model.ainvoke(
-			[*state.messages, {"role": "system", "content": system_message}], config
-		),
+		await call_model_with_retry(model,
+		                            [
+			                            {"role": "system", "content": system_message},
+			                            HumanMessage(content=state.messages[-1].content)
+		                            ],
+		                            config
+		                            ),
 	)
-
+	print("refine analyse:", response)
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
 		return {
@@ -133,17 +141,6 @@ builder.add_edge("call_analyse", "call_refine")
 async def call_output(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
-	"""Call the LLM powering our "agent".
-
-    This function prepares the prompt, initializes the model, and processes the response.
-
-    Args:
-        state (State): The current state of the conversation.
-        config (RunnableConfig): Configuration for the model run.
-
-    Returns:
-        dict: A dictionary containing the model's response message.
-    """
 	configuration = Configuration.from_runnable_config(config)
 
 	# Initialize the model with tool binding. Change the model or add more tools here.
@@ -154,10 +151,16 @@ async def call_output(
 	# Get the model's response
 	response = cast(
 		AIMessage,
-		await model.ainvoke(
-			[*state.messages, {"role": "system", "content": system_message}], config
-		),
+		await call_model_with_retry(model,
+		                            [
+			                            {"role": "system", "content": system_message},
+			                            HumanMessage(content=state.messages[-1].content)
+		                            ],
+		                            config
+		                            ),
 	)
+	response.content = get_json(extract_content(response))
+	print("analyse output:", response)
 
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
@@ -169,9 +172,9 @@ async def call_output(
 				)
 			]
 		}
-	# TODO 隐藏analysis agent的思考过程,保存agent的需求与结果
+
 	# Return the model's response as a list to be added to existing messages
-	return {"messages": [state.requirement, response]}
+	return {"messages": [*state.messages, response]}
 
 
 builder.add_node(call_output)
