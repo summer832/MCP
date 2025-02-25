@@ -6,8 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="262382b2-87f7-4d4c-9b64-6f82ab7026cd" name="Changes" comment="需求Agent结构调整">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/browser.py" beforeDir="false" afterPath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/browser_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/mcp_generate_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/agent-service-toolkit/src/agents/mcp_generate_agent/mcp_generate_agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/codeGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/codeGenerator.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,6 +44,11 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;WebServerToolWindowPanel.toolwindow.highlight.mappings&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowPanel.toolwindow.highlight.symlinks&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowPanel.toolwindow.show.date&quot;: &quot;false&quot;,
+    &quot;WebServerToolWindowPanel.toolwindow.show.permissions&quot;: &quot;false&quot;,
+    &quot;WebServerToolWindowPanel.toolwindow.show.size&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;last_opened_file_path&quot;: &quot;D:/program/python/MCP/test_mcp.py&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
@@ -58,6 +62,11 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\MCP\google-maps" />
+    </key>
+  </component>
   <component name="RunManager" selected="Python.streamlit.exe">
     <configuration name="queryDB" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="google-maps" />
@@ -175,10 +184,10 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.run_service" />
       <item itemvalue="Python.streamlit.exe" />
-      <item itemvalue="Python.test_mcp" />
+      <item itemvalue="Python.run_service" />
       <item itemvalue="Python.visualize" />
+      <item itemvalue="Python.test_mcp" />
       <item itemvalue="Python.queryDB" />
     </list>
     <recent_temporary>
@@ -212,6 +221,9 @@
       <workItem from="1739353752910" duration="13588000" />
       <workItem from="1739399818636" duration="3415000" />
       <workItem from="1739780181365" duration="425000" />
+      <workItem from="1739953230600" duration="2811000" />
+      <workItem from="1740296283220" duration="1858000" />
+      <workItem from="1740365165848" duration="1083000" />
     </task>
     <task id="LOCAL-00001" summary="Changes">
       <created>1739185523072</created>
@@ -260,6 +272,14 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+    <option name="exactExcludedFiles">
+      <list>
+        <option value="$PROJECT_DIR$/mcpapi/index.js" />
+        <option value="$PROJECT_DIR$/mcpapi/example/filesystem/index.js" />
+        <option value="$PROJECT_DIR$/mcpapi/example/filesystem/template.js" />
+        <option value="$PROJECT_DIR$/mcpapi/example/googlemap/index.js" />
+      </list>
+    </option>
   </component>
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">
