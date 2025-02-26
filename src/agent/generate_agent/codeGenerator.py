@@ -64,3 +64,4 @@ input_data = CodeGenerationInput(queries=[
 ])
 output = generate_code(input_data)
 print(output.code)
+
