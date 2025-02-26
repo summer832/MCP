@@ -19,7 +19,7 @@ load_dotenv(dotenv_path=env_path)
 
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
-
+deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
 
 def get_json(string: str) -> str:
 	"""提取字符串的json"""
@@ -74,10 +74,31 @@ def load_chat_model(fully_specified_name: str) -> BaseChatModel:
     """
 	provider, model = fully_specified_name.split("/", maxsplit=1)
 	if provider == "anthropic":
+		try:
+			return init_chat_model(
+				model,
+				model_provider="anthropic",
+				base_url="https://api.openai-proxy.org/anthropic",
+				api_key=anthropic_api_key
+			)
+		except Exception as e:
+			print(f"Error initializing Anthropic model: {str(e)}")
+			# Try without thread_id if that's causing issues
+			if "thread_id" in str(e):
+				print("Trying to initialize model without thread_id...")
+				return init_chat_model(
+					model,
+					model_provider="anthropic",
+					base_url="https://api.openai-proxy.org/anthropic",
+					api_key=anthropic_api_key,
+					thread_id=None
+				)
+			raise e
+	if provider == "deepseek":
 		return init_chat_model(
 			model,
-			model_provider="anthropic",
-			base_url="https://api.openai-proxy.org/anthropic",
-			api_key=anthropic_api_key
+			model_provider="deepseek",
+			base_url="https://api.deepseek.com",
+			api_key=deepseek_api_key
 		)
 	return init_chat_model(model, model_provider=provider)

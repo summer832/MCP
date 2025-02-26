@@ -5,104 +5,63 @@ SYSTEM_PROMPT = """You are a helpful AI assistant.
 System time: {system_time}"""
 
 DATABASE_PROMPT = """
-You are an expert MCP service developer specializing in database operations. 
-Generate typescript code compliant with MCP protocol v1.2, ensuring seamless integration with Cline client through stdio transport. 
-You should analyse the requirement from user, them implement them with code.
-Please just return the code, and do not return any other description words. 
-I will directly run your code on mcp server
-Follow these specifications:
-/**
- * MCP数据库服务标准接口
- * 输入结构: {
- *   "requirement_type": "database",
- *   "operation_details": [操作步骤列表],
- *   "config": {
- *     "db_type": "mysql/postgres",
- *     "table_schema": "表结构描述",
- *     "security_rules": ["参数化查询", "连接加密"] 
- *   }
- * }
- * 
- * 输出要求：符合MCP工具协议的异步服务
- */
+# MCP DATABASE SERVICE GENERATOR
 
+You are an expert MCP service developer specializing in database operations. Your task is to generate TypeScript code that is fully compliant with MCP protocol v1.2, ensuring seamless integration with Cline client through stdio transport.
+
+## IMPORTANT INSTRUCTIONS
+1. Analyze the user requirement carefully
+2. Implement the requirement with clean, well-structured TypeScript code
+3. Return ONLY the complete code with no additional text, explanations, or markdown formatting
+4. The code must be directly executable on an MCP server
+
+## INPUT STRUCTURE
+```typescript
+{
+  "requirement_type": "database",
+  "operation_details": [/* Array of operation steps */],
+  "config": {
+    "db_type": "mysql/postgres",
+    "table_schema": "/* Table structure description */",
+    "security_rules": ["参数化查询", "连接加密"] 
+  }
+}
+```
+
+## CODE TEMPLATE
+```typescript
 // ==================== 协议实现框架 ====================
-import { McpServer, McpTool, McpResource } from '@mcp/core';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ToolSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { Pool, PoolConfig } from 'pg';
 import { createPool as createMysqlPool } from 'mysql2/promise';
 import { z } from 'zod';
 
 class DatabaseMCP {
-  private readonly mcp: McpServer;
+  private readonly server: Server;
   private connectionPool: Pool | any;
   
   constructor() {
-    this.mcp = new McpServer({
-      name: 'database-service',
-      version: process.env.SERVICE_VERSION || '1.0.0'
-    });
+    this.server = new Server(
+      {
+        name: 'database-service',
+        version: process.env.SERVICE_VERSION || '1.0.0'
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
 
     this.initializeConnectionPool();
-    this.registerCoreTools();
-    this.registerCustomTools();
-  }
-
-  // ==================== 通用模式定义 ====================
-  private static Schemas = {
-    ConnectionParams: z.object({
-      host: z.string().min(1),
-      port: z.number().int().positive(),
-      database: z.string().min(1),
-      user: z.string(),
-      password: z.string()
-    }),
-    
-    OperationResult: z.object({
-      success: z.boolean(),
-      executionTime: z.number(),
-      affectedRecords: z.number().optional(),
-      error: z.string().optional()
-    })
-  };
-
-  // ==================== 核心工具注册 ====================
-  private registerCoreTools() {
-    /** 标准健康检查工具 */
-    this.mcp.tool('health_check', {
-      description: '数据库连接健康检查',
-      input: z.object({ timeout: z.number().optional() }),
-      handler: async ({ timeout = 5000 }) => {
-        // 实现带超时的连接检查
-      }
-    });
-
-    /** 查询执行器（通用） */
-    this.mcp.tool('execute_query', {
-      description: '执行参数化SQL查询',
-      input: z.object({
-        query: z.string().min(1),
-        params: z.array(z.unknown()).optional()
-      }),
-      handler: async ({ query, params }) => {
-        // 实现带重试机制的查询执行
-      }
-    });
-  }
-
-  // ==================== 动态工具生成 ====================
-  private registerCustomTools() {
-    // 根据用户输入的operation_details生成工具
-    const { operation_details, config } = this.parseInput();
-
-    operation_details.forEach((step, index) => {
-      const toolName = `step_${index + 1}_${this.sanitizeName(step)}`;
-      
-      this.mcp.tool(toolName, {
-        description: step,
-        input: this.buildInputSchema(step),
-        handler: this.buildHandler(step, config)
-      });
-    });
+    this.registerRequestHandlers();
+    this.registerTools();
   }
 
   // ==================== 连接池管理 ====================
@@ -117,67 +76,84 @@ class DatabaseMCP {
       idleTimeoutMillis: 30000
     };
 
-    this.connectionPool = config.db_type === 'postgres' 
-      ? new Pool(poolConfig)
-      : createMysqlPool(poolConfig);
+    // Initialize connection pool based on database type
+  }
+
+  // ==================== 请求处理器注册 ====================
+  private registerRequestHandlers() {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          // Tool definitions will be generated here
+        ]
+      };
+    });
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      // Tool execution logic will be implemented here
+    });
+  }
+
+  // ==================== 工具注册 ====================
+  private registerTools() {
+    // Tools will be registered here based on operation_details
   }
 
   // ==================== 服务启动 ====================
-  public start() {
-    this.mcp.listen({
-      port: Number(process.env.MCP_PORT) || 8080,
-      onStart: () => {
-        console.log(`MCP服务已启动，协议版本: ${this.mcp.version}`);
-      }
-    });
+  public async start() {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    console.log(`MCP服务已启动，协议版本: ${this.server.version}`);
   }
 }
 
 // ==================== 服务初始化 ====================
-new DatabaseMCP().start();
-关键生成规则：
-动态工具生成机制
-解析operation_details生成工具名（如step_1_获取当前日期）
-根据操作描述自动推断输入模式（使用zod模式匹配）
-生成基础事务模板（带自动提交/回滚）
-通用能力注入:
-/**
- * 构建动态处理函数
- * @param step 用户需求中的操作步骤描述
- * @param config 数据库配置
- * @returns 符合MCP工具协议的处理函数
- */
-private buildHandler(step: string, config: any): ToolHandler {
-  // 实现基于自然语言描述的SQL生成逻辑
-  // 示例：将"查询当天的数据库活动信息"映射为SELECT语句
-  const queryGenerator = (desc: string) => {
-    if (desc.includes('查询')) return this.buildSelectQuery(desc, config.table_schema);
-    if (desc.includes('插入')) return this.buildInsertQuery(desc);
-  };
+new DatabaseMCP().start().catch((error) => {
+  console.error("Fatal error running server:", error);
+  process.exit(1);
+});
+```
 
-  return async (input) => {
-    const conn = await this.connectionPool.connect();
-    try {
-      const generatedQuery = queryGenerator(step);
-      const result = await conn.query(generatedQuery, input.params);
-      return { success: true, ...result };
-    } catch (error) {
-      await conn.query('ROLLBACK');
-      return { success: false, error: error.message };
-    } finally {
-      conn.release();
-    }
-  };
+## KEY IMPLEMENTATION REQUIREMENTS
+1. Dynamic tool generation based on operation_details
+2. Input schema inference using Zod
+3. Transaction management with automatic commit/rollback
+4. Parameterized queries for security
+5. Error handling with detailed error messages
+6. Connection pooling for performance
+
+## SECURITY REQUIREMENTS
+1. Use parameterized queries, never string interpolation
+2. Validate all inputs with Zod schemas
+3. Implement proper error handling and logging
+4. Use connection pooling with timeouts
+5. Follow security rules specified in the config
+
+REMEMBER: Return ONLY the complete TypeScript code with no additional text or explanations.
+"""
+
+BROWSER_PROMPT = """
+# MCP BROWSER SERVICE GENERATOR
+
+You are an expert MCP service developer specializing in browser automation. Your task is to generate TypeScript code that is fully compliant with MCP protocol v1.2, ensuring seamless integration with Cline client through stdio transport.
+
+## IMPORTANT INSTRUCTIONS
+1. Analyze the user requirement carefully
+2. Implement the requirement with clean, well-structured TypeScript code
+3. Return ONLY the complete code with no additional text, explanations, or markdown formatting
+4. The code must be directly executable on an MCP server
+
+## INPUT STRUCTURE
+```typescript
+{
+  "requirement_type": "browser",
+  "operation_details": [/* Array of browser operation steps */]
 }
-安全规范:
-// 在buildHandler中自动注入安全措施
-const securityCheck = (query: string) => {
-  if (config.security_rules.includes('参数化查询') && query.includes('${')) {
-    throw new Error('禁止使用字符串插值，必须使用参数化查询');
-  }
-  return query;
-};
-The basic MCP service code format is as follows:
+```
+
+## CODE TEMPLATE
+```typescript
+// ==================== 协议实现框架 ====================
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -185,46 +161,108 @@ import {
   ListToolsRequestSchema,
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import puppeteer from 'puppeteer';
+import { z } from 'zod';
 
-// Server setup
-const server = new Server(
-  {
-    name: "xxx-server",
-    version: "0.1.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  },
-);
+class BrowserMCP {
+  private readonly server: Server;
+  private browser: puppeteer.Browser | null = null;
+  
+  constructor() {
+    this.server = new Server(
+      {
+        name: 'browser-service',
+        version: process.env.SERVICE_VERSION || '1.0.0'
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      // 工具列表
-    ]
-  };
-});
+    this.registerRequestHandlers();
+    this.registerTools();
+  }
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {  
-// 工具调用处理逻辑
-});
+  // ==================== 浏览器初始化 ====================
+  private async initializeBrowser() {
+    if (!this.browser) {
+      this.browser = await puppeteer.launch({
+        headless: process.env.HEADLESS !== 'false',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+    }
+    return this.browser;
+  }
 
-async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // ==================== 请求处理器注册 ====================
+  private registerRequestHandlers() {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          // Tool definitions will be generated here
+        ]
+      };
+    });
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      // Tool execution logic will be implemented here
+    });
+  }
+
+  // ==================== 工具注册 ====================
+  private registerTools() {
+    // Tools will be registered here based on operation_details
+  }
+
+  // ==================== 服务启动 ====================
+  public async start() {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    console.log(`MCP服务已启动，协议版本: ${this.server.version}`);
+  }
+
+  // ==================== 服务关闭 ====================
+  public async close() {
+    if (this.browser) {
+      await this.browser.close();
+    }
+    await this.server.close();
+  }
 }
 
-runServer().catch((error) => {
+// ==================== 服务初始化 ====================
+const service = new BrowserMCP();
+service.start().catch((error) => {
   console.error("Fatal error running server:", error);
   process.exit(1);
 });
-You should combine above together to achieve the requirement
-"""
 
-BROWSER_PROMPT = """
-	
+// Handle process termination
+process.on('SIGINT', async () => {
+  await service.close();
+  process.exit(0);
+});
+```
+
+## KEY IMPLEMENTATION REQUIREMENTS
+1. Dynamic tool generation based on operation_details
+2. Input schema validation using Zod
+3. Browser automation using Puppeteer
+4. Screenshot capture and return capabilities
+5. Error handling with detailed error messages
+6. Resource cleanup on service termination
+
+## COMMON BROWSER OPERATIONS
+1. Navigation to URLs
+2. Form filling and submission
+3. Element selection and interaction
+4. Screenshot capture
+5. Data extraction from web pages
+6. Waiting for page events or elements
+
+REMEMBER: Return ONLY the complete TypeScript code with no additional text or explanations.
 """
 
 CHECK_PROMPT = """
@@ -341,12 +379,14 @@ Based on the previous analysis results, please:
 Generate the improved code version
 Explain the key changes made
 Your response should follow this JSON structure:
-<RESPONSE_FORMAT>
+```json
 {
-  "improvedCode": "Complete corrected code",
+  "improvedCode": "Complete corrected code with all quotes properly escaped",
   "changeSummary": ["Brief explanation of modifications"]
 }
-</RESPONSE_FORMAT>
+```
+
+IMPORTANT: When including code in the JSON response, make sure to properly escape all quotes and special characters. Do not use backticks (`) to enclose the code - use escaped double quotes (\") instead.
 
 The reference knowledge are given as follow:
 MCP is a JSON-RPC 2.0 based protocol that requires:

@@ -6,6 +6,7 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, cast
+from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -93,17 +94,39 @@ async def call_supervisor(
 	except Exception as e:
 		print(f"Error type: {type(e).__name__}")
 		print(f"Error message: {str(e)}")
-		exit(0)
+		# Instead of exiting, return an error message that can be handled by the system
+		return {
+			"messages": [*state.messages, AIMessage(content=f"Error in supervisor: {str(e)}")],
+			"members": state.members,
+			"current_step": state.current_step
+		}
 
 	# 更新go_next_step
 	if not response.content:
 		go_next_step = True
 	else:
-		go_next_step = response.content == "true"
+		# Ensure the response is either "true" or "false", default to True for unexpected responses
+		content = response.content.strip().lower()
+		if content in ["true", "false"]:
+			go_next_step = content == "true"
+		else:
+			print(f"Warning: Unexpected response from supervisor: {content}. Defaulting to False.")
+			go_next_step = False
 
 	# 更新current_step
 	if go_next_step:
-		state.current_step = update_next_step(state, configuration)
+		next_step = update_next_step(state, configuration)
+		
+		# 检查是否需要跳过步骤
+		if next_step == "compose_agent" and not hasattr(state, 'codegen_result'):
+			print("Warning: Cannot proceed to compose_agent without code generation result. Staying at current step.")
+			go_next_step = False
+		elif next_step == "codegen_agent" and not hasattr(state, 'analyse_result'):
+			print("Warning: Cannot proceed to codegen_agent without analysis result. Staying at current step.")
+			go_next_step = False
+		else:
+			state.current_step = next_step
+	
 	print("goto ", state.current_step)
 	# Handle the case when it's the last step and the model still wants to use a tool
 	if state.is_last_step and response.tool_calls:
@@ -116,6 +139,10 @@ async def call_supervisor(
 			]
 		}
 
+	# agent完成后写入代码
+	if state.current_step == "__end__":
+		pass
+		
 	return {
 		"messages": state.messages,
 		"members": state.members,
@@ -144,6 +171,13 @@ def route_model_output(state: State) -> Literal[
 	"""
 	if state.current_step == "__start__":
 		return "call_supervisor"
+	
+	# Validate that current_step is a valid step
+	valid_steps = ["call_supervisor", "analyse_agent", "codegen_agent", "compose_agent", "__end__"]
+	if state.current_step not in valid_steps:
+		print(f"Warning: Invalid step '{state.current_step}'. Defaulting to 'call_supervisor'.")
+		return "call_supervisor"
+	
 	return state.current_step
 
 
@@ -177,12 +211,42 @@ async def call_analyse(
 			"max_search_results": analysis_cfg_obj.max_search_results,
 		}
 	)
-	response = await AnalysisGraph.ainvoke(input=input_message, config=analysis_runconfig)
+	try:
+		response = await AnalysisGraph.ainvoke(input=input_message, config=analysis_runconfig)
 
-	analysis_messages = response["messages"]
-	analysis_result = json.loads(get_json(extract_content(analysis_messages[-1])))
-	analysis_result["original_requirement"] = last_human_message.content
-	print("analyse result: ", analysis_messages[-1])
+		analysis_messages = response["messages"]
+		last_message = analysis_messages[-1]
+		
+		# Try to extract state information from the last message
+		try:
+			# Check if the last message contains state data in JSON format
+			state_data = json.loads(last_message.content)
+			if isinstance(state_data, dict) and "analyse_result" in state_data:
+				# Extract the analysis result from the state data
+				analysis_result = json.loads(state_data["analyse_result"]) if isinstance(state_data["analyse_result"], str) else state_data["analyse_result"]
+				analysis_result["original_requirement"] = last_human_message.content
+				print("Extracted analyse result from state data")
+			else:
+				# If the last message doesn't contain state data, parse it as the analysis result
+				analysis_result = json.loads(get_json(extract_content(last_message)))
+				analysis_result["original_requirement"] = last_human_message.content
+				print("analyse result: ", last_message)
+		except (json.JSONDecodeError, AttributeError, KeyError) as e:
+			print(f"Error parsing analysis result: {str(e)}")
+			# Create a default analysis result if parsing fails
+			analysis_result = {
+				"original_requirement": last_human_message.content,
+				"error": f"Failed to parse analysis result: {str(e)}",
+				"requirements": [{"description": "Please try again with a clearer requirement"}]
+			}
+	except Exception as e:
+		print(f"Error in analysis agent: {str(e)}")
+		return {
+			"messages": [*state.messages, AIMessage(content=f"Error in analysis agent: {str(e)}")],
+			"requirement": last_human_message,
+			"analyse_history": [],
+			"analyse_result": HumanMessage(content=json.dumps({"error": str(e)}, ensure_ascii=False)),
+		}
 
 	# TODO 当前不支持多轮访问analysis agent(覆盖历史记录)
 	return {
@@ -211,32 +275,72 @@ async def call_codegen(
 			"max_search_results": codegen_cfg_obj.max_search_results,
 		}
 	)
-	response = await CodegenGraph.ainvoke(input=input_message, config=codegen_runconfig)
-	code_result = response["state"].code
-	print("codegen result:", code_result)
-	return {
-		"messages": [*state.messages, AIMessage(content=code_result)],
-		"codegen_history": [response["messages"]],
-		"codegen_result": HumanMessage(content=code_result),
-	}
+	try:
+		response = await CodegenGraph.ainvoke(input=input_message, config=codegen_runconfig)
+		print("codegen result:", response)
+		
+		# Try to extract state information from the last message
+		if "messages" in response and response["messages"]:
+			last_message = response["messages"][-1]
+			try:
+				# Check if the last message contains state data in JSON format
+				state_data = json.loads(last_message.content)
+				if isinstance(state_data, dict) and "code" in state_data:
+					# Extract the code from the state data
+					code_result = state_data["code"]
+					print("Extracted code from state data")
+				else:
+					# If the last message doesn't contain state data, use it as the code result
+					code_result = last_message.content
+			except (json.JSONDecodeError, AttributeError) as e:
+				print(f"Error parsing codegen result: {str(e)}")
+				# Fallback to checking the state
+				if "state" in response and hasattr(response["state"], "code"):
+					code_result = response["state"].code
+				elif isinstance(response, dict) and "state" in response and isinstance(response["state"], dict) and "code" in response["state"]:
+					code_result = response["state"]["code"]
+				else:
+					print("Warning: Unexpected response structure from codegen agent")
+					code_result = "// Error: Could not generate code properly. Please check the requirements and try again."
+		else:
+			# Fallback to checking the state
+			if "state" in response and hasattr(response["state"], "code"):
+				code_result = response["state"].code
+			elif isinstance(response, dict) and "state" in response and isinstance(response["state"], dict) and "code" in response["state"]:
+				code_result = response["state"]["code"]
+			else:
+				print("Warning: Unexpected response structure from codegen agent")
+				code_result = "// Error: Could not generate code properly. Please check the requirements and try again."
+
+		return {
+			"messages": [*state.messages, AIMessage(content=code_result)],
+			"codegen_history": [response.get("messages", [])],
+			"codegen_result": HumanMessage(content=code_result),
+		}
+	except Exception as e:
+		error_message = f"Error in code generation: {str(e)}"
+		print(error_message)
+		return {
+			"messages": [*state.messages, AIMessage(content=error_message)],
+			"codegen_history": [],
+			"codegen_result": HumanMessage(content="// " + error_message),
+		}
 
 
 builder.add_node("codegen_agent", call_codegen)
 builder.add_edge("codegen_agent", "call_supervisor")
 
 
-# TODO 未完成, 生成package.json, tsconfig.json, README.MD
 async def call_compose(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
+	"""Compose agent for generating package.json, tsconfig.json, and README.md files.
+	
+	This function takes the code generated by the codegen agent and passes it to the compose agent,
+	which generates the necessary configuration files and saves them to the result directory.
+	"""
 	print("call_compose...")
-	code_message = state.messages[-2]
-	print(code_message)
-	if not isinstance(code_message, AIMessage):
-		raise ValueError(
-			f"Expected AIMessage in output edges, but got {type(code_message).__name__}"
-		)
-	input_message = ComposeInputState(messages=code_message)
+	input_message = ComposeInputState(messages=state.codegen_result)
 	compose_cfg_obj = ComposeConfiguration()
 	compose_runconfig = RunnableConfig(
 		configurable={
@@ -245,18 +349,122 @@ async def call_compose(
 			"max_search_results": compose_cfg_obj.max_search_results,
 		}
 	)
-	response = await ComposeGraph.ainvoke(input=input_message, config=compose_runconfig)
+	
+	try:
+		response = await ComposeGraph.ainvoke(input=input_message, config=compose_runconfig)
 
-	compose_messages = response["messages"]
-	print("analyse result:", compose_messages)
-	final_code = compose_messages[-1]
+		if "messages" not in response:
+			print("Warning: No messages in compose agent response")
+			compose_messages = []
+		else:
+			compose_messages = response["messages"]
+			print("compose result:", compose_messages[-1] if compose_messages else "No messages")
+		
+		# Try to extract state information from the last message
+		package_json = ""
+		tsconfig_json = ""
+		readme_md = ""
+		
+		if compose_messages and len(compose_messages) > 0:
+			last_message = compose_messages[-1]
+			try:
+				# Check if the last message contains state data in JSON format
+				state_data = json.loads(last_message.content)
+				if isinstance(state_data, dict):
+					if "package_json" in state_data:
+						package_json = state_data["package_json"]
+						print("Extracted package.json from state data")
+					if "tsconfig_json" in state_data:
+						tsconfig_json = state_data["tsconfig_json"]
+						print("Extracted tsconfig.json from state data")
+					if "readme_md" in state_data:
+						readme_md = state_data["readme_md"]
+						print("Extracted README.md from state data")
+			except (json.JSONDecodeError, AttributeError) as e:
+				print(f"Error parsing compose result: {str(e)}")
+				# Fallback to checking the response object
+				if isinstance(response, dict) and "package_json" in response:
+					package_json = response["package_json"]
+				elif hasattr(response, "package_json") and response.package_json:
+					package_json = response.package_json
+					
+				if isinstance(response, dict) and "tsconfig_json" in response:
+					tsconfig_json = response["tsconfig_json"]
+				elif hasattr(response, "tsconfig_json") and response.tsconfig_json:
+					tsconfig_json = response.tsconfig_json
+					
+				if isinstance(response, dict) and "readme_md" in response:
+					readme_md = response["readme_md"]
+				elif hasattr(response, "readme_md") and response.readme_md:
+					readme_md = response.readme_md
+		else:
+			# Fallback to checking the response object
+			if isinstance(response, dict) and "package_json" in response:
+				package_json = response["package_json"]
+			elif hasattr(response, "package_json") and response.package_json:
+				package_json = response.package_json
+				
+			if isinstance(response, dict) and "tsconfig_json" in response:
+				tsconfig_json = response["tsconfig_json"]
+			elif hasattr(response, "tsconfig_json") and response.tsconfig_json:
+				tsconfig_json = response.tsconfig_json
+				
+			if isinstance(response, dict) and "readme_md" in response:
+				readme_md = response["readme_md"]
+			elif hasattr(response, "readme_md") and response.readme_md:
+				readme_md = response.readme_md
+		
+		# Create result directory if it doesn't exist
+		result_dir = Path("result")
+		result_dir.mkdir(exist_ok=True)
+		
+		try:
+			# Save the index.ts file from the codegen result
+			with open(result_dir / "index.ts", "w", encoding="utf-8") as f:
+				f.write(state.codegen_result.content)
+			
+			# Save the package.json file if it exists
+			if package_json:
+				with open(result_dir / "package.json", "w", encoding="utf-8") as f:
+					f.write(package_json)
+			
+			# Save the tsconfig.json file if it exists
+			if tsconfig_json:
+				with open(result_dir / "tsconfig.json", "w", encoding="utf-8") as f:
+					f.write(tsconfig_json)
+			
+			# Save the README.md file if it exists
+			if readme_md:
+				with open(result_dir / "README.md", "w", encoding="utf-8") as f:
+					f.write(readme_md)
+		except Exception as e:
+			print(f"Error saving files: {str(e)}")
+			
+		# Create a summary message
+		summary = f"""Successfully generated MCP server files:
+- index.ts: Main server implementation
+- package.json: Project configuration with dependencies
+- tsconfig.json: TypeScript configuration
+- README.md: Documentation
 
-	# TODO 当前不支持多轮访问compose agent(覆盖历史记录)
-	return {
-		"messages": [*state.messages, compose_messages],
-		"code": final_code,
-		"compose_history": [compose_messages],
-	}
+All files have been saved to the 'result' directory.
+"""
+		
+		final_message = AIMessage(content=summary)
+		
+		return {
+			"messages": [*state.messages, final_message],
+			"code": state.codegen_result.content,
+			"compose_history": [compose_messages],
+		}
+		
+	except Exception as e:
+		error_message = f"Error in compose agent: {str(e)}"
+		print(error_message)
+		return {
+			"messages": [*state.messages, AIMessage(content=error_message)],
+			"compose_history": [],
+		}
 
 
 builder.add_node("compose_agent", call_compose)

@@ -52,6 +52,10 @@ class State(InputState):
     This is a 'managed' variable, controlled by the state machine rather than user code.
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
+    # Add attributes used in the analysis_agent/graph.py
+    requirement: str = field(default="")
+    analyse_history: list = field(default_factory=list)
+    analyse_result: str = field(default="")
     # Additional attributes can be added here as needed.
     # Common examples include:
     # retrieved_documents: List[Document] = field(default_factory=list)

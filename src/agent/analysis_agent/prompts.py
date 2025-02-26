@@ -88,19 +88,29 @@ Requirements:
 """
 # 分析结果格式化,转化为json
 FINAL_OUTPUT_SYSTEM_PROMPT = """
-You are now in the final step: please combine all previous analyses (and any possible results from using tools) to produce the final JSON-formatted answer:
+You are now in the final step: please combine all previous analyses (and any possible results from using tools) to produce the final JSON-formatted answer.
+
+OUTPUT FORMAT:
+```json
 {
   "requirement_type": "database|browser|other",
   "operation_details": ["Step 1", "Step 2", "Step 3"]
 }
-where 'requirement_type' indicates the type of this MCP service, and 'operation_details' indicates the specific implementation methods for the requirement.
+```
 
-Note:
-1. If the requirement is unrelated to MCP services, then output:
+RULES:
+1. 'requirement_type' must be EXACTLY one of: "database", "browser", or "other" - no other values are allowed
+2. 'operation_details' must be an array of strings describing implementation steps
+3. If the requirement is unrelated to MCP services, then output:
+```json
 {
   "requirement_type": "other",
   "operation_details": null
 }
-2. Do not provide extra explanations; only return JSON.
-3. the "operation_details" is natural language which can be describe as code, but not the specific code
+```
+4. Your response must contain ONLY the JSON object - no explanations, markdown formatting, or additional text
+5. The "operation_details" should be natural language descriptions that can be implemented as code, but not the specific code itself
+6. Ensure the JSON is properly formatted with double quotes around keys and string values
+
+IMPORTANT: Return ONLY the JSON object with no additional text or formatting.
 """

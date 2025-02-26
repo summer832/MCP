@@ -76,10 +76,24 @@ def load_chat_model(fully_specified_name: str) -> BaseChatModel:
     """
 	provider, model = fully_specified_name.split("/", maxsplit=1)
 	if provider == "anthropic":
-		return init_chat_model(
-			model,
-			model_provider="anthropic",
-			base_url="https://api.openai-proxy.org/anthropic",
-			api_key=anthropic_api_key
-		)
+		try:
+			return init_chat_model(
+				model,
+				model_provider="anthropic",
+				base_url="https://api.openai-proxy.org/anthropic",
+				api_key=anthropic_api_key
+			)
+		except Exception as e:
+			print(f"Error initializing Anthropic model: {str(e)}")
+			# Try without thread_id if that's causing issues
+			if "thread_id" in str(e):
+				print("Trying to initialize model without thread_id...")
+				return init_chat_model(
+					model,
+					model_provider="anthropic",
+					base_url="https://api.openai-proxy.org/anthropic",
+					api_key=anthropic_api_key,
+					thread_id=None
+				)
+			raise e
 	return init_chat_model(model, model_provider=provider)

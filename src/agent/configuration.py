@@ -56,11 +56,11 @@ class Configuration:
 			),
 			WorkflowNode(
 				name="codegen_agent",
-				description="负责代码生成,输入可以用代码实现的具体需求json,输出对应代码实现list"
+				description="负责代码生成,输入可以用代码实现的具体需求json,输出具体的代码"
 			),
 			WorkflowNode(
 				name="compose_agent",
-				description="负责代码整合,输入代码片段list,输出Typescript实现的完整MCP代码"
+				description="负责代码整合,为生成的typescript代码配置json文件"
 			)
 		],
 		metadata={

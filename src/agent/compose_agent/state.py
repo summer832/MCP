@@ -1,4 +1,4 @@
-"""Define the state structures for the agent."""
+"""Define the state structures for the compose agent."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class InputState:
     Messages tracking the primary execution state of the agent.
 
     Typically accumulates a pattern of:
-    1. HumanMessage - user input
+    1. HumanMessage - user input with the generated code
     2. AIMessage with .tool_calls - agent picking tool(s) to use to collect information
     3. ToolMessage(s) - the responses (or errors) from the executed tools
     4. AIMessage without .tool_calls - agent responding in unstructured format to the user
@@ -40,9 +40,9 @@ class InputState:
 
 @dataclass
 class State(InputState):
-    """Represents the complete state of the agent, extending InputState with additional attributes.
+    """Represents the complete state of the compose agent, extending InputState with additional attributes.
 
-    This class can be used to store any information needed throughout the agent's lifecycle.
+    This class stores the generated code and configuration files.
     """
 
     is_last_step: IsLastStep = field(default=False)
@@ -53,8 +53,13 @@ class State(InputState):
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
 
-    # Additional attributes can be added here as needed.
-    # Common examples include:
-    # retrieved_documents: List[Document] = field(default_factory=list)
-    # extracted_entities: Dict[str, Any] = field(default_factory=dict)
-    # api_connections: Dict[str, Any] = field(default_factory=dict)
+    # Store the original TypeScript code
+    code: str = field(default="")
+    
+    # Store the generated configuration files
+    package_json: str = field(default="")
+    tsconfig_json: str = field(default="")
+    readme_md: str = field(default="")
+    
+    # Store the final result summary
+    final_result: str = field(default="")

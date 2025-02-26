@@ -7,6 +7,7 @@ from typing import Dict, List, Literal, cast
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -173,8 +174,19 @@ async def call_output(
 			]
 		}
 
+	# Store state information in the response content
+	# This ensures that state data is preserved without relying on MemorySaver
+	state_data = {
+		"requirement": state.requirement if hasattr(state, "requirement") else "",
+		"analyse_history": state.analyse_history if hasattr(state, "analyse_history") else [],
+		"analyse_result": response.content
+	}
+	
+	# Create a new response with state information embedded
+	final_response = AIMessage(content=json.dumps(state_data, ensure_ascii=False))
+
 	# Return the model's response as a list to be added to existing messages
-	return {"messages": [*state.messages, response]}
+	return {"messages": [*state.messages, final_response]}
 
 
 builder.add_node(call_output)
