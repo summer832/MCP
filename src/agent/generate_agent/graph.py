@@ -3,8 +3,11 @@
 Works with a chat model with tool calling support.
 """
 import json
+import os
+import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, cast
+from pathlib import Path
 
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -17,7 +20,9 @@ from agent.generate_agent.state import InputState, State
 from agent.generate_agent.tools import TOOLS
 from agent.generate_agent.utils import load_chat_model, get_json, extract_content
 from agent.generate_agent.prompts import CHECK_PROMPT, REVISE_PROMPT, DATABASE_PROMPT, SYSTEM_PROMPT, BROWSER_PROMPT
-from pathlib import Path
+
+# Import from cline4py package
+from agent.cline4py.cline4py import ClineClient, FolderManager
 
 from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed, wait_combine
 
@@ -37,108 +42,71 @@ async def call_model_with_retry(model, messages, config):
 async def call_model(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
-	"""generate the code"""
-	# get config
+	"""Generate code using Cline instead of direct prompts"""
+	# Get config
 	configuration = Configuration.from_runnable_config(config)
-	model = load_chat_model(configuration.model)
 	state.requirement = state.messages[0].content
-	# choose prompt
-	print("start generate:", state.messages)
+
+	# Parse requirement info
+	print("Starting code generation with Cline:", state.messages)
 	info = json.loads(get_json(state.requirement))
+
+	# Initialize Cline client
+	client = ClineClient()
+	folder_manager = FolderManager()
+
+	# Create result folder if it doesn't exist
+	result_folder = os.path.abspath("result")
+	os.makedirs(result_folder, exist_ok=True)
+
+	# Open the result folder in Cline
+	try:
+		folder_manager.open_folder_in_vscode(result_folder)
+		print(f"Opened folder in VSCode: {result_folder}")
+	except Exception as e:
+		print(f"Warning: Could not open folder in VSCode: {str(e)}")
+
+	# Prepare the prompt for Cline based on requirement type
 	if info["requirement_type"] == "database":
-		system_prompt = DATABASE_PROMPT
+		prompt_type = "database"
 	elif info["requirement_type"] == "browser":
-		system_prompt = BROWSER_PROMPT
+		prompt_type = "browser"
 	else:
-		system_prompt = SYSTEM_PROMPT
+		prompt_type = "general"
 
-	# get code - with handling for potentially truncated responses
-	max_attempts = 3
-	attempt = 0
-	complete_code = ""
-	partial_code = ""
+	# Create a message for Cline with the requirement and instructions
+	cline_message = f"""
+	I need you to generate an index.ts file based on the following requirements:
+	
+	Requirement Type: {prompt_type}
+	
+	Requirements:
+	{info.get('requirement', '')}
+	
+	Please create a complete and well-structured index.ts file that implements these requirements.
+	Save the file as index.ts in the current folder.
+	"""
 
-	# Hard limit on attempts to prevent infinite loops
-	absolute_max_attempts = 10
+	try:
+		# Send the request to Cline
+		response = client.process_message(cline_message)
+		print("Cline response received")
 
-	while attempt < max_attempts and absolute_max_attempts > 0:
-		absolute_max_attempts -= 1
-		try:
-			# If we have partial code from a previous attempt, include it in the messages
-			messages = [{"role": "system", "content": system_prompt}]
-			messages.extend(state.messages)
+		# Wait for Cline to generate the file
+		# Read the generated file
+		file_path = os.path.join(result_folder, "index.ts")
+		if os.path.exists(file_path):
+			with open(file_path, "r", encoding="utf-8") as f:
+				complete_code = f.read()
+		else:
+			# If file doesn't exist, use a fallback message
+			complete_code = "// Error: Cline did not generate the index.ts file. Please check the requirements and try again."
+			print(f"Warning: File not found at {file_path}")
+	except Exception as e:
+		print(f"Error in Cline code generation: {str(e)}")
+		complete_code = f"// Error: Failed to generate code with Cline: {str(e)}"
 
-			if partial_code and attempt > 0:
-				# Add a message indicating that the previous attempt was incomplete
-				messages.append(HumanMessage(
-					content=f"The previous code generation was incomplete. Please continue from where it left off and complete the code. Here's what was generated so far:\n\n{partial_code}"))
-
-			response = cast(
-				AIMessage,
-				await model.ainvoke(messages, config),
-			)
-			response.content = extract_content(response)
-			print(f"code result {attempt} times:", response.content)
-
-			if response.content.replace("\\n", "") == "<<HUMAN_CONVERSATION_END>>":
-				attempt += 1
-				continue
-
-			code_content = response.content
-
-			# If we have partial code from a previous attempt, try to combine them intelligently
-			if partial_code and attempt > 0:
-				# Check if the new content seems to be a continuation or a completely new response
-				if not code_content.strip().startswith("{") and partial_code.strip().endswith("{"):
-					# Looks like a continuation, append it
-					code_content = partial_code + "\n" + code_content
-				elif code_content.count('{') > code_content.count('}'):
-					# New content has unbalanced braces, might be a fresh start
-					# Use the one with more content or the new one if they're similar in size
-					if len(code_content) > len(partial_code) * 1.2:  # 20% longer
-						partial_code = code_content
-					else:
-						# Try to merge them intelligently
-						code_content = partial_code + "\n" + code_content
-				else:
-					# Use the new content if it seems more complete
-					if code_content.count('{') == code_content.count('}') and code_content.strip().endswith('}'):
-						partial_code = code_content
-					else:
-						# Use the longer one
-						if len(code_content) > len(partial_code):
-							partial_code = code_content
-
-			else:
-				# First attempt, just store the code
-				partial_code = code_content
-
-			# Check if the code appears complete (has closing braces matching opening ones)
-			if partial_code.count('{') == partial_code.count('}') and partial_code.strip().endswith('}'):
-				complete_code = partial_code
-				break
-			else:
-				# If we're on the last attempt and code still seems incomplete, 
-				# try to complete it by adding missing closing braces
-				# TODO 这里可以考虑使用cline4py
-				if attempt == max_attempts - 1:
-					missing_braces = partial_code.count('{') - partial_code.count('}')
-					if missing_braces > 0:
-						complete_code = partial_code + '\n' + ('}' * missing_braces)
-					else:
-						complete_code = partial_code
-				else:
-					# Store the partial code for the next attempt
-					attempt += 1
-					continue
-		except Exception as e:
-			print(f"Error in code generation attempt {attempt + 1}: {str(e)}")
-			attempt += 1
-
-	if not complete_code:
-		complete_code = "// Error: Could not generate complete code after multiple attempts"
-
-	print("generate the code:", complete_code[:100] + "..." if len(complete_code) > 100 else complete_code)
+	print("Generated code:", complete_code[:100] + "..." if len(complete_code) > 100 else complete_code)
 
 	return {
 		"messages": [*state.messages, AIMessage(content=complete_code)],
@@ -192,13 +160,8 @@ def make_check_history(state: State) -> List[BaseMessage]:
 async def call_check(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
+	"""Check code using Cline instead of direct prompts"""
 	configuration = Configuration.from_runnable_config(config)
-
-	# TODO暂不支持tool
-	# model = load_chat_model(configuration.model).bind_tools(TOOLS)
-	model = load_chat_model(configuration.model)
-	# Format the system prompt. Customize this to change the agent's behavior.
-	system_message = CHECK_PROMPT
 
 	# Ensure code is not empty or invalid before checking
 	if not state.code or state.code.strip() == "" or state.code.startswith("// Error:"):
@@ -224,24 +187,90 @@ async def call_check(
 		}
 
 	try:
-		tmp_message = [{"role": "system", "content": system_message}]
-		tmp_message.extend(make_check_history(state))
-		response = cast(
-			AIMessage,
-			await model.ainvoke(tmp_message, config),
-		)
+		# Initialize Cline client
+		client = ClineClient()
+		folder_manager = FolderManager()
 
-		extracted_content = extract_content(response)
-		res = json.loads(get_json(extracted_content))
-		print("check result:", res)
+		# Make sure the result folder is open in Cline
+		result_folder = os.path.abspath("result")
+		try:
+			folder_manager.open_folder_in_vscode(result_folder)
+			print(f"Opened folder in VSCode for code checking: {result_folder}")
+		except Exception as e:
+			print(f"Warning: Could not open folder in VSCode: {str(e)}")
+
+		# Create a message for Cline with the code checking instructions
+		check_message = f"""
+		I need you to check the code in the index.ts file in the current folder.
+		
+		Requirements:
+		{state.requirement}
+		
+		Please analyze the code and provide a detailed assessment in JSON format with the following structure:
+		
+		```json
+		{{
+			"isValid": true/false,
+			"checkResults": {{
+				"baseProtocol": {{"passed": true/false, "issues": ["issue1", "issue2"]}},
+				"serverSetup": {{"passed": true/false, "issues": ["issue1", "issue2"]}},
+				"handlers": {{"passed": true/false, "issues": ["issue1", "issue2"]}},
+				"tools": {{"passed": true/false, "issues": ["issue1", "issue2"]}}
+			}},
+			"summary": {{
+				"errors": ["error1", "error2"],
+				"warnings": ["warning1", "warning2"]
+			}}
+		}}
+		```
+		
+		The code should be checked against the following criteria:
+		1. Does it implement the requirements correctly?
+		2. Is it well-structured and follows best practices?
+		3. Are there any potential bugs or issues?
+		4. Is the code complete and functional?
+		
+		Please provide your assessment in the JSON format described above.
+		"""
+
+		# Send the request to Cline
+		response = client.process_message(check_message)
+		print("Cline check response received")
+
+		# Extract the JSON from the response
+		# We'll look for a JSON structure in the response
+		content = response.get("response", "")
+		extracted_content = extract_content(content) if content else content
+
+		# Try to parse the JSON from the response
+		try:
+			res = json.loads(get_json(extracted_content))
+		except Exception as e:
+			print(f"Error parsing JSON from Cline response: {str(e)}")
+			# Create a default response if we can't parse the JSON
+			res = {
+				"isValid": False,
+				"checkResults": {
+					"baseProtocol": {"passed": False, "issues": ["Could not parse check results"]},
+					"serverSetup": {"passed": False, "issues": ["Could not parse check results"]},
+					"handlers": {"passed": False, "issues": ["Could not parse check results"]},
+					"tools": {"passed": False, "issues": ["Could not parse check results"]}
+				},
+				"summary": {
+					"errors": ["Could not parse check results from Cline"],
+					"warnings": ["Please check the requirements and try again"]
+				}
+			}
+
+		print("Check result:", res)
 
 		return {
 			"messages": [*state.messages, AIMessage(content=json.dumps(res, ensure_ascii=False))],
 			"check_history": [*state.check_history, AIMessage(content=extracted_content)],
-			"is_valid": res["isValid"]
+			"is_valid": res.get("isValid", False)
 		}
 	except Exception as e:
-		print(f"Error in code checking: {str(e)}")
+		print(f"Error in code checking with Cline: {str(e)}")
 		default_result = {
 			"isValid": False,
 			"checkResults": {
@@ -251,7 +280,7 @@ async def call_check(
 				"tools": {"passed": False, "issues": ["Error during code checking"]}
 			},
 			"summary": {
-				"errors": [f"Error during code checking: {str(e)}"],
+				"errors": [f"Error during code checking with Cline: {str(e)}"],
 				"warnings": ["Please check the requirements and try again"]
 			}
 		}
@@ -298,138 +327,121 @@ def make_revise_history(state: State) -> List[BaseMessage]:
 async def call_revise(
 		state: State, config: RunnableConfig
 ) -> Dict[str, List[AIMessage]]:
+	"""Revise code using Cline instead of direct prompts"""
 	configuration = Configuration.from_runnable_config(config)
 
-	# TODO暂不支持tool
-	# model = load_chat_model(configuration.model).bind_tools(TOOLS)
-	model = load_chat_model(configuration.model)
-	# Format the system prompt. Customize this to change the agent's behavior.
-	system_message = REVISE_PROMPT
+	try:
+		# Initialize Cline client
+		client = ClineClient()
+		folder_manager = FolderManager()
 
-	# Add retry mechanism for revise similar to code generation
-	max_attempts = 3
-	attempt = 0
-	final_improved_code = ""
-	partial_improved_code = ""
-
-	# Hard limit on attempts to prevent infinite loops
-	absolute_max_attempts = 10
-
-	while attempt < max_attempts and not final_improved_code and absolute_max_attempts>0:
-		absolute_max_attempts -= 1
+		# Make sure the result folder is open in Cline
+		result_folder = os.path.abspath("result")
 		try:
-			# Prepare messages for the model
-			tmp_message = [{"role": "system", "content": system_message}]
-			base_history = make_revise_history(state)
-			tmp_message.extend(base_history)
-
-			# If we have partial improved code from a previous attempt, include it
-			if partial_improved_code and attempt > 0:
-				tmp_message.append(HumanMessage(
-					content=f"The previous revision was incomplete. Please continue from where it left off and complete the improved code. Here's what was generated so far:\n\n{partial_improved_code}"))
-
-			response = cast(
-				AIMessage,
-				await call_model_with_retry(model, tmp_message, config),
-			)
-
-			print(f"revise result attempt {attempt}:", response)
-			content = extract_content(response)
-
-			# Try to parse the response as JSON
-			res = get_json(content)
-			# Validate that the result is valid JSON
-			tmp = json.loads(res)
-
-			# Verify that improvedCode exists and is not empty
-			if "improvedCode" not in tmp or not tmp["improvedCode"] or tmp["improvedCode"].strip() == "":
-				if attempt < max_attempts - 1:
-					attempt += 1
-					continue
-				else:
-					raise ValueError("improvedCode field is missing or empty after multiple attempts")
-
-			improved_code = tmp["improvedCode"]
-
-			# If we have partial improved code from a previous attempt, try to combine them
-			if partial_improved_code and attempt > 0:
-				# Check if the new content seems to be a continuation
-				if not improved_code.strip().startswith("{") and partial_improved_code.strip().endswith("{"):
-					# Looks like a continuation, append it
-					improved_code = partial_improved_code + "\n" + improved_code
-				elif improved_code.count('{') > improved_code.count('}'):
-					# New content has unbalanced braces, might be a fresh start
-					# Use the one with more content or the new one if they're similar in size
-					if len(improved_code) > len(partial_improved_code) * 1.2:  # 20% longer
-						partial_improved_code = improved_code
-					else:
-						# Try to merge them intelligently
-						improved_code = partial_improved_code + "\n" + improved_code
-				else:
-					# Use the new content if it seems more complete
-					if improved_code.count('{') == improved_code.count('}') and improved_code.strip().endswith('}'):
-						partial_improved_code = improved_code
-					else:
-						# Use the longer one
-						if len(improved_code) > len(partial_improved_code):
-							partial_improved_code = improved_code
-			else:
-				# First attempt, just store the code
-				partial_improved_code = improved_code
-
-			# Check if the improved code appears complete
-			if partial_improved_code.count('{') == partial_improved_code.count(
-					'}') and partial_improved_code.strip().endswith('}'):
-				final_improved_code = partial_improved_code
-				tmp["improvedCode"] = final_improved_code
-				res = json.dumps(tmp)  # Update the JSON string with fixed code
-				break
-			else:
-				# If we're on the last attempt and code still seems incomplete, 
-				# try to complete it by adding missing closing braces
-				if attempt == max_attempts - 1:
-					missing_braces = partial_improved_code.count('{') - partial_improved_code.count('}')
-					if missing_braces > 0:
-						final_improved_code = partial_improved_code + '\n' + ('}' * missing_braces)
-						tmp["improvedCode"] = final_improved_code
-						res = json.dumps(tmp)  # Update the JSON string with fixed code
-					else:
-						final_improved_code = partial_improved_code
-						tmp["improvedCode"] = final_improved_code
-						res = json.dumps(tmp)  # Update the JSON string with fixed code
-				else:
-					# Store the partial code for the next attempt
-					attempt += 1
-					continue
+			folder_manager.open_folder_in_vscode(result_folder)
+			print(f"Opened folder in VSCode for code revision: {result_folder}")
 		except Exception as e:
-			# Handle any errors during the revision process
-			print(f"Error in code revision: {str(e)}")
-			print(f"Using original code as fallback")
+			print(f"Warning: Could not open folder in VSCode: {str(e)}")
 
-			# Create a fallback response that preserves the original code
-			fallback_code = state.code
-			if fallback_code.startswith("// Error:"):
-				fallback_code = "// Error: Could not generate code properly. Please check the requirements and try again."
+		# Get the check results to include in the revision request
+		check_results = ""
+		if hasattr(state, 'check_history') and state.check_history:
+			last_check = state.check_history[-1].content if hasattr(state.check_history[-1], 'content') else str(
+				state.check_history[-1])
+			check_results = last_check
 
-			error_json = json.dumps({
-				"error": f"Failed during code revision: {str(e)}",
-				"improvedCode": fallback_code
-			})
+		# Create a message for Cline with the code revision instructions
+		revise_message = f"""
+		I need you to revise the code in the index.ts file in the current folder based on the following requirements and check results.
+		
+		Requirements:
+		{state.requirement}
+		
+		Check Results:
+		{check_results}
+		
+		Please improve the code to address the issues identified in the check results and ensure it meets all requirements.
+		After making your improvements, please provide a summary of the changes you made in JSON format with the following structure:
+		
+		```json
+		{{
+			"changes": [
+				"Description of change 1",
+				"Description of change 2"
+			],
+			"improvedCode": "The full improved code here"
+		}}
+		```
+		
+		Please make sure to save your changes to the index.ts file in the current folder.
+		"""
 
-			return {
-				"messages": [*state.messages, AIMessage(content=error_json)],
-				"revise_history": [*state.revise_history, AIMessage(content=error_json)],
-				"conversation_turn": state.conversation_turn + 1,
-				"code": fallback_code  # Preserve the original code instead of losing it
+		# Send the request to Cline
+		response = client.process_message(revise_message)
+		print("Cline revision response received")
+
+		# Extract the JSON from the response
+		content = response.get("response", "")
+		extracted_content = extract_content(content) if content else content
+
+		# Read the revised file
+		file_path = os.path.join(result_folder, "index.ts")
+		if os.path.exists(file_path):
+			with open(file_path, "r", encoding="utf-8") as f:
+				final_improved_code = f.read()
+		else:
+			# If file doesn't exist, use a fallback message
+			final_improved_code = state.code  # Use original code as fallback
+			print(f"Warning: Revised file not found at {file_path}, using original code")
+
+		# Try to parse the JSON from the response to get the changes
+		try:
+			res_json = get_json(extracted_content)
+			res = json.loads(res_json)
+
+			# If the response doesn't include the improved code, add it
+			if "improvedCode" not in res or not res["improvedCode"]:
+				res["improvedCode"] = final_improved_code
+
+			res_json = json.dumps(res)
+		except Exception as e:
+			print(f"Error parsing JSON from Cline revision response: {str(e)}")
+			# Create a default response with the improved code
+			res = {
+				"changes": ["Code was revised but change details could not be parsed"],
+				"improvedCode": final_improved_code
 			}
+			res_json = json.dumps(res)
 
-	# Return the final result after all attempts
-	return {
-		"messages": [*state.messages, AIMessage(content=res)],
-		"revise_history": [*state.revise_history, AIMessage(content=content)],
-		"conversation_turn": state.conversation_turn + 1,
-		"code": final_improved_code
-	}
+		print("Revision result:", res)
+
+		return {
+			"messages": [*state.messages, AIMessage(content=res_json)],
+			"revise_history": [*state.revise_history, AIMessage(content=extracted_content)],
+			"conversation_turn": state.conversation_turn + 1,
+			"code": final_improved_code
+		}
+	except Exception as e:
+		# Handle any errors during the revision process
+		print(f"Error in code revision with Cline: {str(e)}")
+		print(f"Using original code as fallback")
+
+		# Create a fallback response that preserves the original code
+		fallback_code = state.code
+		if fallback_code.startswith("// Error:"):
+			fallback_code = "// Error: Could not generate code properly. Please check the requirements and try again."
+
+		error_json = json.dumps({
+			"error": f"Failed during code revision with Cline: {str(e)}",
+			"improvedCode": fallback_code
+		})
+
+		return {
+			"messages": [*state.messages, AIMessage(content=error_json)],
+			"revise_history": [*state.revise_history, AIMessage(content=error_json)],
+			"conversation_turn": state.conversation_turn + 1,
+			"code": fallback_code  # Preserve the original code instead of losing it
+		}
 
 
 builder.add_node(call_revise)
@@ -454,7 +466,7 @@ def route_model_output(state: State) -> Literal["__end__", "call_revise"]:
 
 	if state.conversation_turn >= max_conversation_turns or state.is_valid:
 		print(f"Ending generation after {state.conversation_turn} turns")
-		
+
 		# Before ending, store state information in a new message
 		# This ensures that state data is preserved without relying on MemorySaver
 		state_data = {
@@ -462,13 +474,16 @@ def route_model_output(state: State) -> Literal["__end__", "call_revise"]:
 			"code": state.code if hasattr(state, "code") else "",
 			"is_valid": state.is_valid if hasattr(state, "is_valid") else False,
 			"conversation_turn": state.conversation_turn if hasattr(state, "conversation_turn") else 0,
-			"check_history": [msg.content if hasattr(msg, "content") else str(msg) for msg in state.check_history] if hasattr(state, "check_history") and state.check_history else [],
-			"revise_history": [msg.content if hasattr(msg, "content") else str(msg) for msg in state.revise_history] if hasattr(state, "revise_history") and state.revise_history else []
+			"check_history": [msg.content if hasattr(msg, "content") else str(msg) for msg in
+			                  state.check_history] if hasattr(state, "check_history") and state.check_history else [],
+			"revise_history": [msg.content if hasattr(msg, "content") else str(msg) for msg in
+			                   state.revise_history] if hasattr(state,
+			                                                    "revise_history") and state.revise_history else []
 		}
-		
+
 		# Add the state data as the last message
 		state.messages.append(AIMessage(content=json.dumps(state_data, ensure_ascii=False)))
-		
+
 		return "__end__"
 	# Otherwise we execute the requested actions
 	return "call_revise"
